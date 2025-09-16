@@ -6,18 +6,17 @@ import re
 
 import httpx
 import pandas as pd
+from bs4 import BeautifulSoup
 
 
 class CanvasService:
     """
-    Minimal Canvas API client for read-only analytics.
+    Read-only Canvas API client used to derive:
+      - Module order and items
+      - Echo video titles per module (from ExternalTool/ExternalUrl item titles OR page-embed iframe titles)
+      - Active student count (preferred # Students KPI)
 
-    Features used:
-      - Modules & Module Items (to derive module ordering)
-      - Enrollments (active StudentEnrollment count)
-
-    Authentication: Personal Access Token via Authorization: Bearer <token>
-    Base URL example: https://colostate.instructure.com
+    Auth: Personal Access Token (Authorization: Bearer <token>)
     """
 
     def __init__(self, base_url: str, token: str, timeout: float = 30.0) -> None:
@@ -30,9 +29,6 @@ class CanvasService:
     # ---------------- Internal helpers ----------------
 
     def _get_all(self, url: str, params: Dict | None = None) -> List[Dict]:
-        """
-        Follow Canvas pagination via Link header, aggregating all pages.
-        """
         out: List[Dict] = []
         next_url = url
         next_params = params or {}
@@ -60,67 +56,136 @@ class CanvasService:
 
         return out
 
-    # ---------------- Public API ----------------
-
-    # Modules & Items
-
-    def list_modules(self, course_id: int) -> List[Dict]:
-        url = f"{self.base_url}/api/v1/courses/{course_id}/modules"
-        return self._get_all(url, params={"per_page": 100})
-
-    def list_module_items(self, course_id: int, module_id: int) -> List[Dict]:
-        url = f"{self.base_url}/api/v1/courses/{course_id}/modules/{module_id}/items"
-        return self._get_all(url, params={"per_page": 100})
-
-    # --- title cleanup: strip trailing (mm:ss) or (h:mm:ss) often appended in Canvas ---
-    _DURATION_TAIL_RE = re.compile(r"\s*\((?:\d{1,2}:)?\d{1,2}:\d{2}\)\s*$")
+    # Title cleanup patterns: (hh:mm[:ss]), "(read only)", "- 12345"
+    _DUR_TAIL_RE   = re.compile(r"\s*\((?:\d{1,2}:)?\d{1,2}:\d{2}\)\s*$", re.I)
+    _READONLY_RE   = re.compile(r"\s*\(read only\)\s*$", re.I)
+    _NUM_ID_TAIL_RE = re.compile(r"\s*-\s*\d{4,}\s*$")
 
     @classmethod
-    def _strip_duration_suffix(cls, title: str) -> str:
+    def _strip_noise(cls, title: str) -> str:
         if not title:
             return ""
-        return cls._DURATION_TAIL_RE.sub("", str(title)).strip()
+        t = str(title).strip()
+        t = cls._READONLY_RE.sub("", t)
+        t = cls._DUR_TAIL_RE.sub("", t)
+        t = cls._NUM_ID_TAIL_RE.sub("", t)
+        return t.strip()
+
+    # ---------------- Public API: modules & items ----------------
+
+    def list_modules_with_items(self, course_id: int) -> List[Dict]:
+        """Prefer a single call with include=items to preserve natural item order."""
+        url = f"{self.base_url}/api/v1/courses/{course_id}/modules"
+        return self._get_all(url, params={"per_page": 100, "include[]": "items"})
+
+    def get_page_body(self, course_id: int, page_url: str) -> str:
+        """Fetch a Canvas page body (HTML)."""
+        url = f"{self.base_url}/api/v1/courses/{course_id}/pages/{page_url}"
+        r = self.client.get(url)
+        r.raise_for_status()
+        return r.json().get("body") or ""
+
+    @staticmethod
+    def _extract_echo_embeds_from_html(html: str) -> List[Dict]:
+        """Parse <iframe> embeds that look like Echo360 and return their titles (raw, cleaned)."""
+        if not html:
+            return []
+        soup = BeautifulSoup(html, "html.parser")
+        out: List[Dict] = []
+        for iframe in soup.find_all("iframe"):
+            src = iframe.get("src", "") or ""
+            # Echo360 direct or Canvas external tools' retrieve URLs
+            if ("echo360.org" not in src) and ("external_tools/retrieve" not in src):
+                continue
+            iframe_title = (iframe.get("title") or "").strip()
+            if not iframe_title:
+                continue
+            cleaned = CanvasService._strip_noise(iframe_title)
+            out.append(
+                {
+                    "video_title_raw": cleaned,                # duration etc. stripped
+                    "video_title_original": iframe_title,      # original title in iframe
+                }
+            )
+        return out
 
     def build_order_df(self, course_id: int) -> pd.DataFrame:
         """
-        Return a DataFrame describing the course content order.
+        Return a DataFrame with module/item ordering and Echo video titles extracted.
 
-        Columns:
+        Columns (superset; some null depending on item type):
           - module (str)
           - module_position (int)
-          - item_title_raw (str)             # original Canvas item title
-          - video_title_raw (str)            # Canvas title with trailing (hh:mm[:ss]) removed
-          - item_title_normalized (str)      # casefolded raw title
-          - item_type (str)                  # 'Assignment','ExternalTool','Page', ...
+          - item_type (str)                  # 'ExternalTool','ExternalUrl','Page','Assignment','Quiz','Discussion',...
           - item_position (int)
+          - item_title_raw (str)             # original Canvas item title (noise NOT stripped)
+          - item_title_normalized (str)      # casefolded item title
+          - video_title_raw (str|None)       # for Echo videos: cleaned title used to match Echo CSV
           - html_url (str|None)
           - external_url (str|None)
         """
-        modules = self.list_modules(course_id)
+        modules = self.list_modules_with_items(course_id)
 
         rows: List[Dict] = []
         for m in sorted(modules, key=lambda x: x.get("position", 0)):
-            mod_id = m.get("id")
-            items = self.list_module_items(course_id, mod_id)
-            for it in sorted(items, key=lambda x: x.get("position", 0)):
-                raw_title = (it.get("title") or "").strip()
-                rows.append(
-                    {
-                        "module": m.get("name"),
-                        "module_position": m.get("position"),
-                        "item_title_raw": raw_title,
-                        "video_title_raw": self._strip_duration_suffix(raw_title),
-                        "item_title_normalized": raw_title.casefold(),
-                        "item_type": it.get("type"),
-                        "item_position": it.get("position"),
-                        "html_url": it.get("html_url"),
-                        "external_url": it.get("external_url"),
-                    }
-                )
+            mod_name = m.get("name")
+            mod_pos = m.get("position")
+            for it in sorted(m.get("items", []), key=lambda x: x.get("position", 0)):
+                item_type = it.get("type")
+                title = (it.get("title") or "").strip()
+                item_pos = it.get("position")
+                html_url = it.get("html_url")
+                external_url = it.get("external_url")
 
-        return pd.DataFrame(rows)
+                # Default row (non-video items still useful for gradebook mapping)
+                base_row = {
+                    "module": mod_name,
+                    "module_position": mod_pos,
+                    "item_type": item_type,
+                    "item_position": item_pos,
+                    "item_title_raw": title,
+                    "item_title_normalized": title.casefold(),
+                    "video_title_raw": None,  # filled for Echo videos below
+                    "html_url": html_url,
+                    "external_url": external_url,
+                }
 
-    # Enrollments (preferred student count)
+                # ---- Echo videos via ExternalTool / ExternalUrl ----
+                if item_type in ("ExternalTool", "ExternalUrl"):
+                    url = external_url or ""
+                    if "echo360.org" in url:
+                        # Canvas item title typically mirrors Echo media title (with duration) → clean it
+                        vr = self._strip_noise(title)
+                        row = base_row.copy()
+                        row["video_title_raw"] = vr
+                        rows.append(row)
+                        continue  # done
+
+                # ---- Echo videos embedded inside a Page ----
+                if item_type == "Page":
+                    page_url = it.get("page_url")
+                    try:
+                        body = self.get_page_body(course_id, page_url) if page_url else ""
+                    except httpx.HTTPStatusError:
+                        body = ""
+                    embeds = self._extract_echo_embeds_from_html(body)
+                    if embeds:
+                        for e in embeds:
+                            row = base_row.copy()
+                            row["video_title_raw"] = e["video_title_raw"]
+                            rows.append(row)
+                        continue  # already appended embed rows
+                    # No echo embeds found → still keep the page row (non-video)
+                    rows.append(base_row)
+                    continue
+
+                # ---- Other items (Assignments, Quizzes, Discussions, Files, etc.) ----
+                rows.append(base_row)
+
+        df = pd.DataFrame(rows)
+        return df
+
+    # ---------------- Enrollments (preferred student count) ----------------
 
     def get_student_count(self, course_id: int) -> Optional[int]:
         """
@@ -149,7 +214,6 @@ class CanvasService:
             pass
 
     def __del__(self) -> None:
-        # Best-effort close without raising in destructor
         try:
             self.close()
         except Exception:
