@@ -33,15 +33,14 @@ _READ_ONLY_RE     = re.compile(r"\s*\(read only\)\s*$", re.I)
 
 # Fuzzy matching knobs
 FUZZY_SCORER   = fuzz.token_set_ratio
-THRESHOLD      = 78     # accept >= this
-FALLBACK_MIN   = 70     # if nothing passes threshold, allow >= this
-TOP_K          = 8      # consider top K canvas candidates per echo
+THRESHOLD      = 80
+FALLBACK_MIN   = 70
+TOP_K          = 6
 
 
 # ---------- helpers ----------
 
 def _find_col(df: pd.DataFrame, want: Iterable[str], required: bool = True) -> Optional[str]:
-    """Return a matching column name (case-insensitive)."""
     low = {c.lower(): c for c in df.columns}
     for w in want:
         if w in low:
@@ -55,7 +54,6 @@ def _find_col(df: pd.DataFrame, want: Iterable[str], required: bool = True) -> O
 
 
 def _to_seconds(x) -> float:
-    """Parse durations like 01:23:45, 12:34, or numeric seconds into float seconds."""
     if pd.isna(x):
         return np.nan
     if isinstance(x, (int, float)):
@@ -64,7 +62,7 @@ def _to_seconds(x) -> float:
     if not s:
         return np.nan
     try:
-        return float(s)  # numeric-as-string
+        return float(s)
     except Exception:
         pass
     parts = s.split(":")
@@ -82,7 +80,6 @@ def _to_seconds(x) -> float:
 
 
 def _strip_noise_tail(title: str) -> str:
-    """Strip common trailing Canvas/Echo noise: (hh:mm[:ss]), '(read only)', '- 12345'."""
     if not title:
         return ""
     s = str(title)
@@ -93,7 +90,6 @@ def _strip_noise_tail(title: str) -> str:
 
 
 def _norm_text(text: str) -> str:
-    """Normalize titles for deterministic matching (lowercase, de-punctuate, collapse spaces)."""
     s = _strip_noise_tail(text)
     s = "".join(ch.lower() if (ch.isalnum() or ch.isspace()) else " " for ch in s)
     return " ".join(s.split())
@@ -110,28 +106,19 @@ def _greedy_match(
     fallback_min: int,
     top_k: int,
 ) -> List[Tuple[int, int, int]]:
-    """
-    Build candidate matches for each echo key (top_k canvas choices),
-    then greedily select highest scores ensuring each echo and each canvas row
-    is used at most once.
-    Returns list of (echo_idx, canvas_idx, score).
-    """
     candidates: List[Tuple[int, int, int]] = []
     for i, ek in enumerate(ekeys):
-        # top_k candidates (returns tuples (choice, score, idx))
         topn = process.extract(ek, ckeys, scorer=FUZZY_SCORER, limit=top_k)
         for _, sc, j in topn:
             if sc >= threshold:
                 candidates.append((i, j, int(sc)))
 
-    # If none pass threshold, take best single fallback per echo (>= fallback_min)
     if not candidates:
         for i, ek in enumerate(ekeys):
             best = process.extractOne(ek, ckeys, scorer=FUZZY_SCORER)
             if best and best[1] >= fallback_min:
                 candidates.append((i, int(best[2]), int(best[1])))
 
-    # Greedy selection: highest score first, enforce uniqueness
     candidates.sort(key=lambda t: t[2], reverse=True)
     used_e: set[int] = set()
     used_c: set[int] = set()
@@ -147,11 +134,15 @@ def _greedy_match(
 
 # ---------- main builder ----------
 
-def build_echo_tables(echo_csv_file, canvas_order_df: pd.DataFrame) -> EchoTables:
+def build_echo_tables(
+    echo_csv_file,
+    canvas_order_df: pd.DataFrame,
+    class_total_students: Optional[int] = None,   # <--- NEW
+) -> EchoTables:
     """
-    Read the Echo CSV and return DataFrames for the dashboard.
+    Build Echo tables.
 
-    Percent-like values are FRACTIONS in [0..1]; charts display them as 0..100%.
+    Fractions are in [0..1]; charts display them as 0..100%.
     """
     df = pd.read_csv(echo_csv_file)
 
@@ -170,31 +161,54 @@ def build_echo_tables(echo_csv_file, canvas_order_df: pd.DataFrame) -> EchoTable
     # Row-level true view fraction (0..1)
     df["__true_view_frac"] = np.where(df[dur_col] > 0, df[view_col] / df[dur_col], np.nan)
 
-    # ---------- per-media summary (by title) ----------
-    # Unique viewers: prefer distinct uid if present; fallback to non-null viewtimes count
-    if uid_col:
-        uniq_viewers = df.groupby(df[media_col].astype(str))[uid_col].nunique(dropna=True)
-    else:
-        uniq_viewers = df.groupby(df[media_col].astype(str))[view_col].apply(lambda s: s.notna().sum())
-
+    # ---------- per-media summary ----------
     g = df.groupby(df[media_col].astype(str))
-    echo_summary = pd.DataFrame({
-        "Media Title": g.size().index,
-        "Video Duration": g[dur_col].first().values,                 # assume fixed per media
-        "# of Unique Viewers": uniq_viewers.reindex(g.size().index).fillna(0).astype(int).values,
-        "Average View %": g["__true_view_frac"].mean().values,       # fraction 0..1
-    })
-    echo_summary["% of Students Viewing"] = np.nan                   # fraction 0..1 (optional downstream)
-    echo_summary["% of Video Viewed Overall"] = np.nan               # fraction 0..1 (optional downstream)
+    # Unique viewers (prefer user id; else count non-null rows)
+    if uid_col:
+        uniq_viewers = g[uid_col].nunique(dropna=True)
+    else:
+        uniq_viewers = g[view_col].apply(lambda s: s.notna().sum())
 
-    # ---------- Canvas side (module items) ----------
+    # Representative title & duration per media
+    title_per_media = g[media_col].agg(lambda s: s.dropna().astype(str).mode().iloc[0] if not s.dropna().empty else "")
+    dur_per_media = g[dur_col].first()
+
+    # Sum of all view seconds per media (for 'Overall View %')
+    sum_view_seconds = g[view_col].sum(min_count=1)
+
+    echo_summary = pd.DataFrame({
+        "Media Title": title_per_media.index,
+        "Video Duration": dur_per_media.reindex(title_per_media.index).values,
+        "# of Unique Viewers": uniq_viewers.reindex(title_per_media.index).fillna(0).astype(int).values,
+        "Average View %": g["__true_view_frac"].mean().reindex(title_per_media.index).values,   # 0..1
+    })
+
+    # % of Students Viewing (media-level)
+    if class_total_students and class_total_students > 0:
+        echo_summary["% of Students Viewing"] = (
+            echo_summary["# of Unique Viewers"].astype(float) / float(class_total_students)
+        )
+    else:
+        echo_summary["% of Students Viewing"] = np.nan
+
+    # % of Video Viewed Overall (media-level)
+    if class_total_students and class_total_students > 0:
+        denom = echo_summary["Video Duration"].astype(float) * float(class_total_students)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            echo_summary["% of Video Viewed Overall"] = (
+                sum_view_seconds.reindex(title_per_media.index).to_numpy() / denom.to_numpy()
+            )
+    else:
+        echo_summary["% of Video Viewed Overall"] = np.nan
+
+    # ---------- Canvas join ----------
     module_col = "module"
     if canvas_order_df is None or canvas_order_df.empty or module_col not in canvas_order_df.columns:
         module_table = pd.DataFrame(columns=[
             "Module", "Average View %", "# of Students Viewing", "Overall View %", "# of Students"
         ])
     else:
-        # Prefer duration-stripped Canvas title if available (from services.canvas)
+        # Prefer duration-stripped Canvas title if available
         canvas_title_col = None
         for col in ["video_title_raw", "item_title_raw", "item_title_normalized"]:
             if col in canvas_order_df.columns:
@@ -208,29 +222,23 @@ def build_echo_tables(echo_csv_file, canvas_order_df: pd.DataFrame) -> EchoTable
             .copy()
         )
 
-        # Build normalized keys
         order["_ckey"] = _norm_series(order["Canvas Title"])
         es = echo_summary.copy()
         es["_ekey"] = _norm_series(es["Media Title"])
 
-        # 1) Exact key equality joins first (fast path)
+        # 1) Exact key equality
         m1 = order.merge(
-            es[["_ekey", "Media Title", "Video Duration", "# of Unique Viewers", "Average View %"]],
+            es[["_ekey", "Media Title", "Video Duration", "# of Unique Viewers", "Average View %", "% of Video Viewed Overall"]],
             left_on="_ckey", right_on="_ekey", how="left"
         )
 
-        # 2) Greedy one-to-one fuzzy matching for any rows still unmatched
+        # 2) Greedy one-to-one fuzzy matching for still-unmatched rows
         unmatched_idx = m1.index[m1["Average View %"].isna()].tolist()
         if unmatched_idx:
-            # Build unique lists aligned to row indices
             ckeys = m1.loc[unmatched_idx, "_ckey"].fillna("").astype(str).tolist()
             ekeys = es["_ekey"].fillna("").astype(str).tolist()
-
-            # Map back to DataFrame indices
             pairs = _greedy_match(ekeys, ckeys, THRESHOLD, FALLBACK_MIN, TOP_K)
             if pairs:
-                # Build a mapping from echo ek -> echo row, and canvas list position -> m1 index
-                # ekeys[i] is the echo key at i; ckeys[j] is the canvas key for m1 row unmatched_idx[j]
                 rows: List[dict] = []
                 for i, j, sc in pairs:
                     m1_row_index = unmatched_idx[j]
@@ -242,13 +250,17 @@ def build_echo_tables(echo_csv_file, canvas_order_df: pd.DataFrame) -> EchoTable
                         "Video Duration": erow["Video Duration"],
                         "# of Unique Viewers": erow["# of Unique Viewers"],
                         "Average View %": erow["Average View %"],
+                        "% of Video Viewed Overall": erow["% of Video Viewed Overall"],
                     })
                 if rows:
                     m2 = pd.DataFrame(rows).set_index("idx")
-                    fill_cols = ["Media Title", "Video Duration", "# of Unique Viewers", "Average View %"]
+                    fill_cols = ["Media Title", "Video Duration", "# of Unique Viewers", "Average View %", "% of Video Viewed Overall"]
                     m1.loc[m2.index, fill_cols] = m2[fill_cols].values
 
-        # Aggregate by module
+        # Aggregate by module:
+        # - Average View %  => mean of the media in module
+        # - # of Students Viewing => mean of media-level "# of Unique Viewers"
+        # - Overall View %  => mean of media-level "% of Video Viewed Overall"
         have = m1.dropna(subset=["Average View %"])
         if have.empty:
             module_table = pd.DataFrame(columns=[
@@ -258,16 +270,22 @@ def build_echo_tables(echo_csv_file, canvas_order_df: pd.DataFrame) -> EchoTable
             module_table = (
                 have.groupby([module_col, "module_position"], as_index=False)
                     .agg({
-                        "Average View %": "mean",                       # average across medias in the module
-                        "# of Unique Viewers": "sum"                    # sum counts
+                        "Average View %": "mean",
+                        "# of Unique Viewers": "mean",
+                        "% of Video Viewed Overall": "mean",
                     })
-                    .rename(columns={"# of Unique Viewers": "# of Students Viewing",
-                                     module_col: "Module"})
+                    .rename(columns={
+                        "# of Unique Viewers": "# of Students Viewing",
+                        "% of Video Viewed Overall": "Overall View %",
+                        module_col: "Module"
+                    })
                     .sort_values(["module_position"])
                     .drop(columns=["module_position"])
             )
-            module_table["Overall View %"] = np.nan
-            if "# of Students" not in module_table.columns:
+            # Fill constant # of Students if provided (helps UI)
+            if class_total_students:
+                module_table["# of Students"] = int(class_total_students)
+            else:
                 module_table["# of Students"] = np.nan
 
     # ---------- de-identified student summary ----------
@@ -285,7 +303,6 @@ def build_echo_tables(echo_csv_file, canvas_order_df: pd.DataFrame) -> EchoTable
             per_user_seconds.reindex(student["Student"]).to_numpy() / total_seconds
             if total_seconds else np.nan
         )
-        # De-identify Student IDs
         student["Student"] = [f"S{ix+1:04d}" for ix in range(len(student))]
         student_table = student[["Student", "Average View % When Watched", "View % of Total Video"]]
         student_table["Final Grade"] = np.nan
@@ -294,7 +311,6 @@ def build_echo_tables(echo_csv_file, canvas_order_df: pd.DataFrame) -> EchoTable
             "Student", "Final Grade", "Average View % When Watched", "View % of Total Video"
         ])
 
-    # Cleanup temp
     if "__true_view_frac" in df.columns:
         del df["__true_view_frac"]
 
