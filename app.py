@@ -66,7 +66,7 @@ with st.sidebar:
         for k in ["canvas", "echo", "grades", "results", "base_url", "course_id", "student_count"]:
             st.session_state.pop(k, None)
         st.session_state.step = 1
-        st.experimental_rerun()
+        st.rerun()
 
 if st.session_state.step == 1:
     st.header("Step 1 — Canvas Course Number")
@@ -84,7 +84,7 @@ if st.session_state.step == 1:
                 st.session_state["course_id"] = course_id
                 st.session_state["student_count"] = fetch_student_count(base_url, TOKEN, course_id)  # may be None
                 st.session_state.step = 2
-                st.experimental_rerun()
+                st.rerun()
         except Exception as e:
             st.error(f"Canvas error: {e}")
 
@@ -97,7 +97,7 @@ elif st.session_state.step == 2:
             with st.spinner("Processing Echo data..."):
                 st.session_state["echo"] = run_echo_tables(echo_csv.getvalue(), st.session_state["canvas"])
                 st.session_state.step = 3
-                st.experimental_rerun()
+                st.rerun()
         except Exception as e:
             st.error(f"Echo processing error: {e}")
 
@@ -110,7 +110,7 @@ elif st.session_state.step == 3:
             with st.spinner("Processing gradebook data..."):
                 st.session_state["grades"] = run_gradebook_tables(gb_csv.getvalue(), st.session_state["canvas"])
                 st.session_state["results"] = True
-                st.experimental_rerun()
+                st.rerun()
         except Exception as e:
             st.error(f"Gradebook processing error: {e}")
 
@@ -199,6 +199,7 @@ if st.session_state.get("results"):
             to_csv_bytes(gb_tables.module_assignment_metrics_df),
             file_name="gradebook_module_metrics.csv",
         )
+
 
 
 
