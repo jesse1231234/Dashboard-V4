@@ -2,16 +2,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Iterable, List, Tuple
+from typing import Optional, Iterable
 
 import numpy as np
 import pandas as pd
-from rapidfuzz import process, fuzz
 
 
 @dataclass
 class EchoTables:
-    echo_summary: pd.DataFrame            # per-media summary (by media title)
+    echo_summary: pd.DataFrame            # per-media summary
     module_table: pd.DataFrame            # per-module aggregation (ordered by Canvas)
     student_table: pd.DataFrame           # de-identified per-student engagement
 
@@ -24,12 +23,6 @@ CANDIDATES = {
     "avgview":   ["average view time", "avg view time", "avg watch time", "average watch time"],
     "user":      ["user email", "user name", "email", "user", "viewer", "username"],
 }
-
-# Fuzzy matching params (tune if needed)
-FUZZY_SCORER = fuzz.token_set_ratio
-THRESHOLD = 82            # accept pairs scoring >= THRESHOLD
-FALLBACK_MIN = 70         # if nothing meets THRESHOLD, allow a best-effort fallback >= this
-WINNER_MARGIN = 0         # with greedy matching + uniqueness, we can set margin to 0
 
 
 # ---------- helpers ----------
@@ -76,12 +69,7 @@ def _to_seconds(x) -> float:
 
 
 def _norm_text(text: str) -> str:
-    """
-    Normalize titles for matching:
-    - casefold
-    - keep alphanumerics and whitespace (no token deletion — avoid over-normalizing)
-    - collapse whitespace
-    """
+    """Normalize titles for deterministic matching (lowercase, strip punctuation, collapse spaces)."""
     s = "".join(ch.lower() if (ch.isalnum() or ch.isspace()) else " " for ch in str(text))
     return " ".join(s.split())
 
@@ -90,54 +78,13 @@ def _norm_series(s: pd.Series) -> pd.Series:
     return s.fillna("").map(_norm_text)
 
 
-def _greedy_bipartite_from_scores(
-    scores: np.ndarray, echos: List[str], canvases: List[str], threshold: int, fallback_min: int
-) -> List[Tuple[int, int, int]]:
-    """
-    Given an NxM score matrix, select a set of (echo_i, canvas_j) pairs:
-      - sort all candidates by score desc
-      - greedily pick if echo_i and canvas_j are both unused
-      - only accept scores >= threshold; if none accepted at all, allow >= fallback_min
-    Returns: list of (i, j, score)
-    """
-    n, m = scores.shape
-    candidates = []
-    for i in range(n):
-        for j in range(m):
-            sc = int(scores[i, j])
-            if sc >= threshold:
-                candidates.append((i, j, sc))
-
-    # If nothing meets threshold, allow a best match per echo >= fallback_min (if available)
-    if not candidates:
-        for i in range(n):
-            jbest = int(np.argmax(scores[i])) if m else -1
-            if jbest >= 0:
-                sc = int(scores[i, jbest])
-                if sc >= fallback_min:
-                    candidates.append((i, jbest, sc))
-
-    candidates.sort(key=lambda t: t[2], reverse=True)  # high score first
-    used_e = set()
-    used_c = set()
-    chosen: List[Tuple[int, int, int]] = []
-    for i, j, sc in candidates:
-        if i in used_e or j in used_c:
-            continue
-        chosen.append((i, j, sc))
-        used_e.add(i)
-        used_c.add(j)
-    return chosen
-
-
 # ---------- main builder ----------
 
 def build_echo_tables(echo_csv_file, canvas_order_df: pd.DataFrame) -> EchoTables:
     """
     Read the Echo CSV and return DataFrames for the dashboard.
 
-    All percentage-like outputs here are **fractions 0..1** (NOT 0..100).
-    The Streamlit charts convert to % for display (multiply by 100 on plot).
+    Percent-like values are FRACTIONS in [0..1]; charts display them as 0..100%.
     """
     df = pd.read_csv(echo_csv_file)
 
@@ -174,58 +121,70 @@ def build_echo_tables(echo_csv_file, canvas_order_df: pd.DataFrame) -> EchoTable
     echo_summary["% of Video Viewed Overall"] = np.nan               # fraction 0..1 (optional downstream)
 
     # ---------- Canvas side (module items) ----------
-    # ---------- Canvas side (module items) ----------
-module_col = "module"
-if canvas_order_df is None or canvas_order_df.empty or module_col not in canvas_order_df.columns:
-    module_table = pd.DataFrame(columns=[
-        "Module", "Average View %", "# of Students Viewing", "Overall View %", "# of Students"
-    ])
-else:
-    # Prefer the duration-stripped title from Canvas
-    canvas_title_col = None
-    for col in ["video_title_raw", "item_title_raw", "item_title_normalized"]:
-        if col in canvas_order_df.columns:
-            canvas_title_col = col
-            break
-
-    if canvas_title_col is None:
+    module_col = "module"
+    if canvas_order_df is None or canvas_order_df.empty or module_col not in canvas_order_df.columns:
         module_table = pd.DataFrame(columns=[
             "Module", "Average View %", "# of Students Viewing", "Overall View %", "# of Students"
         ])
     else:
-        order = (
-            canvas_order_df[[module_col, "module_position", canvas_title_col]]
-            .dropna(subset=[module_col, canvas_title_col])
-            .rename(columns={canvas_title_col: "Canvas Title"})
-        ).copy()
+        # Prefer the duration-stripped title from Canvas (produced by services.canvas.build_order_df)
+        canvas_title_col = None
+        for col in ["video_title_raw", "item_title_raw", "item_title_normalized"]:
+            if col in canvas_order_df.columns:
+                canvas_title_col = col
+                break
 
-        # EXPLICIT EXACT MATCH: Echo media titles must equal cleaned Canvas titles
-        # (Use string form; keep fractions 0..1; aggregate by module)
-        es = echo_summary.copy()
-        es["Media Title"] = es["Media Title"].astype(str)
+        if canvas_title_col is None:
+            module_table = pd.DataFrame(columns=[
+                "Module", "Average View %", "# of Students Viewing", "Overall View %", "# of Students"
+            ])
+        else:
+            order = (
+                canvas_order_df[[module_col, "module_position", canvas_title_col]]
+                .dropna(subset=[module_col, canvas_title_col])
+                .rename(columns={canvas_title_col: "Canvas Title"})
+            ).copy()
 
-        rows = []
-        for (mod, mpos), grp in order.groupby([module_col, "module_position"], sort=False):
-            titles = grp["Canvas Title"].dropna().astype(str).unique().tolist()
-            sub = es[es["Media Title"].isin(titles)]
-            if sub.empty:
-                continue
-            rows.append(
-                {
-                    "Module": mod,
-                    "module_position": mpos,
-                    "Average View %": sub["Average View %"].mean(skipna=True),     # fraction 0..1
-                    "# of Students Viewing": sub["# of Unique Viewers"].sum(),     # sum of counts
-                    "Overall View %": np.nan,                                      # placeholder if needed later
-                    "# of Students": np.nan,                                       # filled elsewhere if desired
-                }
-            )
+            # Pass 1: exact string equality
+            es = echo_summary.copy()
+            es["Media Title"] = es["Media Title"].astype(str)
 
-        module_table = pd.DataFrame(rows, columns=[
-            "Module", "module_position", "Average View %", "# of Students Viewing", "Overall View %", "# of Students"
-        ])
-        if not module_table.empty:
-            module_table = module_table.sort_values("module_position").drop(columns=["module_position"])
+            m1 = order.merge(es, left_on="Canvas Title", right_on="Media Title", how="left")
+
+            # Pass 2: normalized equality only for unmatched rows
+            unmatched = m1["Average View %"].isna()
+            if unmatched.any():
+                order2 = m1.loc[unmatched, [module_col, "module_position", "Canvas Title"]].copy()
+                order2["_key"] = _norm_series(order2["Canvas Title"])
+                es2 = es.copy()
+                es2["_key"] = _norm_series(es2["Media Title"])
+                m2 = order2.merge(es2, on="_key", how="left").drop(columns=["_key"])
+                # fill only where missing
+                fill_cols = ["Media Title", "Video Duration", "# of Unique Viewers", "Average View %"]
+                for c in fill_cols:
+                    m1.loc[unmatched, c] = m1.loc[unmatched, c].fillna(m2[c].values if c in m2 else np.nan)
+
+            # Aggregate by module
+            have = m1.dropna(subset=["Average View %"])
+            if have.empty:
+                module_table = pd.DataFrame(columns=[
+                    "Module", "Average View %", "# of Students Viewing", "Overall View %", "# of Students"
+                ])
+            else:
+                module_table = (
+                    have.groupby([module_col, "module_position"], as_index=False)
+                        .agg({
+                            "Average View %": "mean",                       # average across medias in the module
+                            "# of Unique Viewers": "sum"                    # sum counts
+                        })
+                        .rename(columns={"# of Unique Viewers": "# of Students Viewing",
+                                         module_col: "Module"})
+                        .sort_values(["module_position"])
+                        .drop(columns=["module_position"])
+                )
+                module_table["Overall View %"] = np.nan
+                if "# of Students" not in module_table.columns:
+                    module_table["# of Students"] = np.nan
 
     # ---------- de-identified student summary ----------
     if uid_col:
