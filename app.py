@@ -40,21 +40,34 @@ def run_gradebook_tables(file_bytes: bytes, canvas_df: pd.DataFrame):
     return build_gradebook_tables(io.BytesIO(file_bytes), canvas_df)
 
 def sort_by_canvas_order(df: pd.DataFrame, module_col: str, canvas_df: pd.DataFrame) -> pd.DataFrame:
-    """Sort a dataframe by Canvas module order using module_position from canvas_df."""
-    if df is None or df.empty or canvas_df is None or canvas_df.empty or module_col not in df.columns:
+    """Sort a dataframe by Canvas module order using module_position; tolerate duplicate names."""
+    if (
+        df is None or df.empty or
+        canvas_df is None or canvas_df.empty or
+        module_col not in df.columns
+    ):
         return df
+
+    # Build ordered list of module names (keep first occurrence only)
     order = (
         canvas_df[["module", "module_position"]]
-        .drop_duplicates()
         .dropna(subset=["module"])
-        .sort_values("module_position")
+        .sort_values(["module_position", "module"], kind="stable")
     )
-    categories = order["module"].tolist()
+    # Deduplicate module names while preserving order
+    categories = pd.unique(order["module"].astype(str))
+
+    if len(categories) == 0:
+        return df
+
     out = df.copy()
+    out[module_col] = out[module_col].astype(str)
     out[module_col] = pd.Categorical(out[module_col], categories=categories, ordered=True)
-    out = out.sort_values(module_col)
+    out = out.sort_values(module_col).reset_index(drop=True)
+    # Return as string for downstream display
     out[module_col] = out[module_col].astype(str)
     return out
+
 
 # ---------------- Wizard UI ----------------
 st.session_state.setdefault("step", 1)
@@ -199,6 +212,7 @@ if st.session_state.get("results"):
             to_csv_bytes(gb_tables.module_assignment_metrics_df),
             file_name="gradebook_module_metrics.csv",
         )
+
 
 
 
