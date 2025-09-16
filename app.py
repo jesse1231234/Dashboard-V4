@@ -149,6 +149,18 @@ if st.session_state.get("results"):
         gb_tables,
         students_from_canvas=st.session_state.get("student_count"),
     )
+    
+    # --- NEW: Constant "# of Students" across modules for the Echo chart ---
+    students_total = (
+        kpis.get("# Students")
+        or st.session_state.get("student_count")
+        or (len(gb_tables.gradebook_df.index) if getattr(gb_tables, "gradebook_df", None) is not None else None)
+    )
+
+    if students_total and hasattr(echo_tables, "module_table") and not echo_tables.module_table.empty:
+        echo_tables.module_table = echo_tables.module_table.copy()
+        echo_tables.module_table["# of Students"] = int(students_total)
+
 
     # KPI header
     c1, c2, c3, c4, c5, c6 = st.columns(6)
@@ -184,7 +196,11 @@ if st.session_state.get("results"):
             st.info("No module-level gradebook metrics to plot.")
 
         if not echo_tables.module_table.empty:
-            st.plotly_chart(chart_echo_combo(echo_tables.module_table), use_container_width=True)
+            st.plotly_chart(
+                chart_echo_combo(echo_tables.module_table, students_total=students_total),
+                use_container_width=True
+            )
+
         else:
             st.info("No module-level Echo metrics to plot.")
 
@@ -212,6 +228,7 @@ if st.session_state.get("results"):
             to_csv_bytes(gb_tables.module_assignment_metrics_df),
             file_name="gradebook_module_metrics.csv",
         )
+
 
 
 
