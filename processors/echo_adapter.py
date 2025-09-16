@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Iterable
+from typing import Optional, Iterable, List
+import re
 
 import numpy as np
 import pandas as pd
+from rapidfuzz import process, fuzz
 
 
 @dataclass
@@ -23,6 +25,15 @@ CANDIDATES = {
     "avgview":   ["average view time", "avg view time", "avg watch time", "average watch time"],
     "user":      ["user email", "user name", "email", "user", "viewer", "username"],
 }
+
+# Cleaning patterns
+_DURATION_TAIL_RE = re.compile(r"\s*\((?:\d{1,2}:)?\d{1,2}:\d{2}\)\s*$", re.I)
+_NUM_ID_TAIL_RE   = re.compile(r"\s*-\s*\d{4,}\s*$")
+_READ_ONLY_RE     = re.compile(r"\s*\(read only\)\s*$", re.I)
+
+# Fuzzy matching
+FUZZY_SCORER = fuzz.token_set_ratio
+FUZZY_THRESHOLD = 85
 
 
 # ---------- helpers ----------
@@ -68,9 +79,21 @@ def _to_seconds(x) -> float:
     return np.nan
 
 
+def _strip_noise_tail(title: str) -> str:
+    """Strip common trailing Canvas/Echo noise: (hh:mm[:ss]), '(read only)', '- 12345'."""
+    if not title:
+        return ""
+    s = str(title)
+    s = _READ_ONLY_RE.sub("", s)
+    s = _DURATION_TAIL_RE.sub("", s)
+    s = _NUM_ID_TAIL_RE.sub("", s)
+    return s.strip()
+
+
 def _norm_text(text: str) -> str:
-    """Normalize titles for deterministic matching (lowercase, strip punctuation, collapse spaces)."""
-    s = "".join(ch.lower() if (ch.isalnum() or ch.isspace()) else " " for ch in str(text))
+    """Normalize titles for deterministic matching (lowercase, de-punctuate, collapse spaces)."""
+    s = _strip_noise_tail(text)
+    s = "".join(ch.lower() if (ch.isalnum() or ch.isspace()) else " " for ch in s)
     return " ".join(s.split())
 
 
@@ -127,65 +150,79 @@ def build_echo_tables(echo_csv_file, canvas_order_df: pd.DataFrame) -> EchoTable
             "Module", "Average View %", "# of Students Viewing", "Overall View %", "# of Students"
         ])
     else:
-        # Prefer the duration-stripped title from Canvas (produced by services.canvas.build_order_df)
+        # Choose the best Canvas title column (duration already stripped in services for video_title_raw)
         canvas_title_col = None
         for col in ["video_title_raw", "item_title_raw", "item_title_normalized"]:
             if col in canvas_order_df.columns:
                 canvas_title_col = col
                 break
 
-        if canvas_title_col is None:
+        order = (
+            canvas_order_df[[module_col, "module_position", canvas_title_col]]
+            .dropna(subset=[module_col, canvas_title_col])
+            .rename(columns={canvas_title_col: "Canvas Title"})
+            .copy()
+        )
+
+        # Build clean keys
+        order["_ckey"] = _norm_series(order["Canvas Title"])
+        es = echo_summary.copy()
+        es["_ekey"] = _norm_series(es["Media Title"])
+
+        # Pass 1: exact key equality
+        m1 = order.merge(
+            es[["_ekey", "Media Title", "Video Duration", "# of Unique Viewers", "Average View %"]],
+            left_on="_ckey", right_on="_ekey", how="left"
+        )
+
+        # Pass 2: fuzzy fallback (only for rows still unmatched)
+        unmatched = m1["Average View %"].isna()
+        if unmatched.any():
+            # Build an index of ekey -> row for fast lookup
+            ekeys = es["_ekey"].tolist()
+            # For each unmatched canvas row, find best echo key
+            rows: List[dict] = []
+            for idx, ckey in m1.loc[unmatched, "_ckey"].items():
+                if not ckey:
+                    continue
+                best = process.extractOne(ckey, ekeys, scorer=FUZZY_SCORER)
+                if best and best[1] >= FUZZY_THRESHOLD:
+                    ek = best[0]
+                    erow = es.loc[es["_ekey"] == ek].iloc[0]
+                    rows.append({
+                        "idx": idx,
+                        "Media Title": erow["Media Title"],
+                        "Video Duration": erow["Video Duration"],
+                        "# of Unique Viewers": erow["# of Unique Viewers"],
+                        "Average View %": erow["Average View %"],
+                    })
+            if rows:
+                m2 = pd.DataFrame(rows).set_index("idx")
+                fill_cols = ["Media Title", "Video Duration", "# of Unique Viewers", "Average View %"]
+                # 2D assign (shapes align)
+                m1.loc[m2.index, fill_cols] = m2[fill_cols].values
+
+        # Aggregate by module
+        have = m1.dropna(subset=["Average View %"])
+        if have.empty:
             module_table = pd.DataFrame(columns=[
                 "Module", "Average View %", "# of Students Viewing", "Overall View %", "# of Students"
             ])
         else:
-            order = (
-                canvas_order_df[[module_col, "module_position", canvas_title_col]]
-                .dropna(subset=[module_col, canvas_title_col])
-                .rename(columns={canvas_title_col: "Canvas Title"})
-            ).copy()
-
-            # Pass 1: exact string equality
-            es = echo_summary.copy()
-            es["Media Title"] = es["Media Title"].astype(str)
-
-            m1 = order.merge(es, left_on="Canvas Title", right_on="Media Title", how="left")
-
-            # Pass 2: normalized equality only for unmatched rows
-            unmatched = m1["Average View %"].isna()
-            if unmatched.any():
-                order2 = m1.loc[unmatched, [module_col, "module_position", "Canvas Title"]].copy()
-                order2["_key"] = _norm_series(order2["Canvas Title"])
-                es2 = es.copy()
-                es2["_key"] = _norm_series(es2["Media Title"])
-                m2 = order2.merge(es2, on="_key", how="left").drop(columns=["_key"])
-
-                # Directly assign the matched columns (shapes align: n_unmatched x 4)
-                fill_cols = ["Media Title", "Video Duration", "# of Unique Viewers", "Average View %"]
-                m1.loc[unmatched, fill_cols] = m2[fill_cols].values
-
-
-            # Aggregate by module
-            have = m1.dropna(subset=["Average View %"])
-            if have.empty:
-                module_table = pd.DataFrame(columns=[
-                    "Module", "Average View %", "# of Students Viewing", "Overall View %", "# of Students"
-                ])
-            else:
-                module_table = (
-                    have.groupby([module_col, "module_position"], as_index=False)
-                        .agg({
-                            "Average View %": "mean",                       # average across medias in the module
-                            "# of Unique Viewers": "sum"                    # sum counts
-                        })
-                        .rename(columns={"# of Unique Viewers": "# of Students Viewing",
-                                         module_col: "Module"})
-                        .sort_values(["module_position"])
-                        .drop(columns=["module_position"])
-                )
-                module_table["Overall View %"] = np.nan
-                if "# of Students" not in module_table.columns:
-                    module_table["# of Students"] = np.nan
+            module_table = (
+                have.groupby([module_col, "module_position"], as_index=False)
+                    .agg({
+                        "Average View %": "mean",                       # average across medias in the module
+                        "# of Unique Viewers": "sum"                    # sum counts
+                    })
+                    .rename(columns={"# of Unique Viewers": "# of Students Viewing",
+                                     module_col: "Module"})
+                    .sort_values(["module_position"])
+                    .drop(columns=["module_position"])
+            )
+            module_table["Overall View %"] = np.nan
+            if "# of Students" not in module_table.columns:
+                module_table["# of Students"] = np.nan
 
     # ---------- de-identified student summary ----------
     if uid_col:
