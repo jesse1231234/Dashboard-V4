@@ -13,7 +13,12 @@ def _pct(x):
     return (s * 100.0).tolist()
 
 
-def chart_gradebook_combo(df: pd.DataFrame) -> go.Figure:
+def chart_gradebook_combo(df: pd.DataFrame, title: str = "Canvas Data") -> go.Figure:
+    """
+    Two straight lines on a single 0–100% y-axis:
+      - Avg % Turned In
+      - Avg Average Excluding Zeros
+    """
     if df is None or df.empty:
         return go.Figure()
 
@@ -22,98 +27,117 @@ def chart_gradebook_combo(df: pd.DataFrame) -> go.Figure:
     y_excl0 = _pct(df["Avg Average Excluding Zeros"])
 
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=x, y=y_turnedin, mode="lines+markers",
-                             name="% Turned In", hovertemplate="%{y:.1f}%<extra>% Turned In</extra>"))
-    fig.add_trace(go.Scatter(x=x, y=y_excl0, mode="lines+markers",
-                             name="Avg Excl Zeros", hovertemplate="%{y:.1f}%<extra>Avg Excl Zeros</extra>"))
+    fig.add_trace(go.Scatter(
+        x=x, y=y_turnedin, mode="lines+markers",
+        name="% Turned In", hovertemplate="%{y:.1f}%<extra>% Turned In</extra>"
+    ))
+    fig.add_trace(go.Scatter(
+        x=x, y=y_excl0, mode="lines+markers",
+        name="Avg Excl Zeros", hovertemplate="%{y:.1f}%<extra>Avg Excl Zeros</extra>"
+    ))
 
     fig.update_yaxes(title_text="Percent", range=[0, 100], ticksuffix="%")
     fig.update_xaxes(title_text="Module")
-    fig.update_layout(margin=dict(l=10, r=10, t=10, b=10), legend=dict(orientation="h"), hovermode="x unified")
+    fig.update_layout(
+        title=title,
+        margin=dict(l=10, r=10, t=40, b=10),
+        legend=dict(orientation="h"),
+        hovermode="x unified",
+    )
     return fig
 
 
 def chart_echo_combo(
     module_table: pd.DataFrame,
     students_total: int | None = None,
-    barmode: str = "stack",   # keep stacked per your spec; switch to "group" if you prefer side-by-side
+    barmode: str = "stack",
+    title: str = "Echo Data",
 ) -> go.Figure:
     """
-    Stacked columns + dual-axis lines:
-      - Bars: "# of Students" (constant across modules) and "# of Unique Viewers" (aka "# of Students Viewing")
-      - Lines (secondary axis): Average View %, Overall View %
-    Ensures Y-axis has headroom so labels never get cut off.
+    Bars represent the TOTAL # of students per module (constant height),
+    with the 'Viewed' portion filling up to '# of Unique Viewers' and the
+    remainder as 'Not Viewed'. Lines (secondary axis) show percent series.
     """
     if module_table is None or module_table.empty:
         return go.Figure()
 
     df = module_table.copy()
-
-    # X labels
     x = df["Module"].astype(str).tolist()
 
-    # Counts
+    # Use "# of Students Viewing" from the module table (now the average-of-unique-viewers),
+    # clamp to [0, students_total], and compute the complementary "Not Viewed".
     viewers_col = "# of Students Viewing" if "# of Students Viewing" in df else "# of Unique Viewers"
-    n_viewers = pd.to_numeric(df.get(viewers_col, pd.Series([0]*len(df))), errors="coerce").fillna(0).astype(int).tolist()
+    raw_viewers = pd.to_numeric(df.get(viewers_col, pd.Series([0]*len(df))), errors="coerce").fillna(0)
 
-    if students_total is not None:
-        n_students = [int(students_total)] * len(x)
+    if students_total is not None and students_total > 0:
+        viewed = raw_viewers.clip(lower=0, upper=students_total).round(0).astype(int).tolist()
+        not_viewed = (students_total - pd.Series(viewed)).clip(lower=0).astype(int).tolist()
+        total_bars = [students_total] * len(x)
+        y_left_max = students_total
     else:
-        n_students = pd.to_numeric(df.get("# of Students", pd.Series([0]*len(df))), errors="coerce").fillna(0).astype(int).tolist()
+        # Fallback: if we don't know the total, show what we have and derive a pseudo-total.
+        n_students_series = pd.to_numeric(df.get("# of Students", pd.Series([0]*len(df))), errors="coerce").fillna(0)
+        # If absent, infer per-module total as max(viewers, '# of Students')
+        total_bars = np.maximum(raw_viewers, n_students_series).round(0).astype(int).tolist()
+        viewed = raw_viewers.round(0).astype(int).tolist()
+        not_viewed = (pd.Series(total_bars) - pd.Series(viewed)).clip(lower=0).astype(int).tolist()
+        y_left_max = max(total_bars) if total_bars else 0
 
     # Percent lines (0..1 -> 0..100)
     avg_view = _pct(df.get("Average View %", pd.Series([np.nan]*len(df))))
     overall_view = _pct(df.get("Overall View %", pd.Series([np.nan]*len(df))))
 
-    # Compute headroom for the left axis
-    if barmode == "stack":
-        stacked_tops = [a + b for a, b in zip(n_students, n_viewers)]
-        max_left = max(stacked_tops + ([students_total] if students_total else []), default=0)
-    else:
-        max_left = max(max(n_students or [0]), max(n_viewers or [0]), (students_total or 0))
-    # Add 10–15% headroom to avoid cutoffs
-    headroom = max(5, int(round(max_left * 0.12)))
-    y_max = max_left + headroom
+    # Headroom so bars/labels never get clipped
+    headroom = max(5, int(round(y_left_max * 0.12)))
+    y_max = y_left_max + headroom
 
     fig = go.Figure()
 
-    # Bars
+    # Stacked bars: Viewed + Not Viewed = Total
     fig.add_trace(
-        go.Bar(x=x, y=n_students, name="# of Students",
-               hovertemplate="%{y:,}<extra># of Students</extra>", offsetgroup=0)
+        go.Bar(
+            x=x, y=viewed, name="# of Unique Viewers",
+            hovertemplate="%{y:,}<extra># of Unique Viewers</extra>", offsetgroup=0
+        )
     )
     fig.add_trace(
-        go.Bar(x=x, y=n_viewers, name="# of Unique Viewers",
-               hovertemplate="%{y:,}<extra># of Unique Viewers</extra>", offsetgroup=0)
+        go.Bar(
+            x=x, y=not_viewed, name="Not Viewed",
+            hovertemplate="%{y:,}<extra>Not Viewed</extra>", offsetgroup=0
+        )
     )
 
     # Lines on secondary axis
     if any(pd.notna(avg_view)):
         fig.add_trace(
-            go.Scatter(x=x, y=avg_view, mode="lines+markers", name="Avg View %",
-                       yaxis="y2", hovertemplate="%{y:.1f}%<extra>Avg View %</extra>")
+            go.Scatter(
+                x=x, y=avg_view, mode="lines+markers", name="Avg View %",
+                yaxis="y2", hovertemplate="%{y:.1f}%<extra>Avg View %</extra>"
+            )
         )
     if any(pd.notna(overall_view)):
         fig.add_trace(
-            go.Scatter(x=x, y=overall_view, mode="lines+markers", name="Avg Overall View %",
-                       yaxis="y2", hovertemplate="%{y:.1f}%<extra>Avg Overall View %</extra>")
+            go.Scatter(
+                x=x, y=overall_view, mode="lines+markers", name="Avg Overall View %",
+                yaxis="y2", hovertemplate="%{y:.1f}%<extra>Avg Overall View %</extra>"
+            )
         )
 
     fig.update_layout(
-        barmode=barmode,
+        title=title,
+        barmode="stack",  # keep stacked so (Viewed + Not Viewed) = Total
         yaxis=dict(title="Students", range=[0, y_max]),
         yaxis2=dict(title="Percent", overlaying="y", side="right", range=[0, 100], ticksuffix="%"),
-        margin=dict(l=10, r=10, t=10, b=10),
+        margin=dict(l=10, r=10, t=40, b=10),
         legend=dict(orientation="h"),
         hovermode="x unified",
     )
 
-    # Optional: draw a horizontal line at the total student count for clarity
+    # Optional dotted line at total (visual anchor)
     if students_total:
         try:
             fig.add_hline(y=students_total, line_dash="dot", line_width=1)
         except Exception:
-            # Fallback for older Plotly versions
             fig.add_shape(type="line", x0=-0.5, x1=len(x)-0.5, y0=students_total, y1=students_total)
 
     fig.update_xaxes(title_text="Module")
