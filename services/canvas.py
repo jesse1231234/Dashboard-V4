@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Optional, List, Dict
+import re
 
 import httpx
 import pandas as pd
@@ -49,11 +50,9 @@ class CanvasService:
             next_url = None
             link = r.headers.get("Link")
             if link:
-                parts = [p.strip() for p in link.split(",")]
-                for p in parts:
-                    if 'rel="next"' in p:
-                        # format: <https://...>; rel="next"
-                        next_url = p.split(";")[0].strip().strip("<>").strip()
+                for part in (p.strip() for p in link.split(",")):
+                    if 'rel="next"' in part:
+                        next_url = part.split(";")[0].strip().strip("<>").strip()
                         break
 
             # only pass params on first request
@@ -73,17 +72,29 @@ class CanvasService:
         url = f"{self.base_url}/api/v1/courses/{course_id}/modules/{module_id}/items"
         return self._get_all(url, params={"per_page": 100})
 
+    # --- title cleanup: strip trailing (mm:ss) or (h:mm:ss) often appended in Canvas ---
+    _DURATION_TAIL_RE = re.compile(r"\s*\((?:\d{1,2}:)?\d{1,2}:\d{2}\)\s*$")
+
+    @classmethod
+    def _strip_duration_suffix(cls, title: str) -> str:
+        if not title:
+            return ""
+        return cls._DURATION_TAIL_RE.sub("", str(title)).strip()
+
     def build_order_df(self, course_id: int) -> pd.DataFrame:
         """
-        Return a DataFrame describing the course content order:
+        Return a DataFrame describing the course content order.
 
         Columns:
           - module (str)
           - module_position (int)
-          - item_title_raw (str)
-          - item_title_normalized (str)
-          - item_type (str)           # e.g., 'Assignment', 'ExternalTool', 'Page', 'File'
+          - item_title_raw (str)             # original Canvas item title
+          - video_title_raw (str)            # Canvas title with trailing (hh:mm[:ss]) removed
+          - item_title_normalized (str)      # casefolded raw title
+          - item_type (str)                  # 'Assignment','ExternalTool','Page', ...
           - item_position (int)
+          - html_url (str|None)
+          - external_url (str|None)
         """
         modules = self.list_modules(course_id)
 
@@ -92,20 +103,22 @@ class CanvasService:
             mod_id = m.get("id")
             items = self.list_module_items(course_id, mod_id)
             for it in sorted(items, key=lambda x: x.get("position", 0)):
-                title = (it.get("title") or "").strip()
+                raw_title = (it.get("title") or "").strip()
                 rows.append(
                     {
                         "module": m.get("name"),
                         "module_position": m.get("position"),
-                        "item_title_raw": title,
-                        "item_title_normalized": title.casefold(),
+                        "item_title_raw": raw_title,
+                        "video_title_raw": self._strip_duration_suffix(raw_title),
+                        "item_title_normalized": raw_title.casefold(),
                         "item_type": it.get("type"),
                         "item_position": it.get("position"),
+                        "html_url": it.get("html_url"),
+                        "external_url": it.get("external_url"),
                     }
                 )
 
-        df = pd.DataFrame(rows)
-        return df
+        return pd.DataFrame(rows)
 
     # Enrollments (preferred student count)
 
