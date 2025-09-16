@@ -3,4 +3,5 @@ pandas
 numpy
 httpx
 rapidfuzz
+beautifulsoup4
 plotly
