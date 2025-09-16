@@ -1,4 +1,1 @@
-# processors/__init__.py
-# Makes 'processors' a package; optional exports:
-from .echo_adapter import build_echo_tables
-from .grades_adapter import build_gradebook_tables, GradebookTables
+# keep this file empty to avoid eager imports that can fail at startup
