@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Iterable, List
+from typing import Optional, Iterable, List, Tuple
 import re
 
 import numpy as np
@@ -31,9 +31,11 @@ _DURATION_TAIL_RE = re.compile(r"\s*\((?:\d{1,2}:)?\d{1,2}:\d{2}\)\s*$", re.I)
 _NUM_ID_TAIL_RE   = re.compile(r"\s*-\s*\d{4,}\s*$")
 _READ_ONLY_RE     = re.compile(r"\s*\(read only\)\s*$", re.I)
 
-# Fuzzy matching
-FUZZY_SCORER = fuzz.token_set_ratio
-FUZZY_THRESHOLD = 85
+# Fuzzy matching knobs
+FUZZY_SCORER   = fuzz.token_set_ratio
+THRESHOLD      = 80     # accept >= this
+FALLBACK_MIN   = 70     # if nothing passes threshold, allow >= this
+TOP_K          = 6      # consider top K canvas candidates per echo
 
 
 # ---------- helpers ----------
@@ -101,6 +103,48 @@ def _norm_series(s: pd.Series) -> pd.Series:
     return s.fillna("").map(_norm_text)
 
 
+def _greedy_match(
+    ekeys: List[str],
+    ckeys: List[str],
+    threshold: int,
+    fallback_min: int,
+    top_k: int,
+) -> List[Tuple[int, int, int]]:
+    """
+    Build candidate matches for each echo key (top_k canvas choices),
+    then greedily select highest scores ensuring each echo and each canvas row
+    is used at most once.
+    Returns list of (echo_idx, canvas_idx, score).
+    """
+    candidates: List[Tuple[int, int, int]] = []
+    for i, ek in enumerate(ekeys):
+        # top_k candidates (returns tuples (choice, score, idx))
+        topn = process.extract(ek, ckeys, scorer=FUZZY_SCORER, limit=top_k)
+        for _, sc, j in topn:
+            if sc >= threshold:
+                candidates.append((i, j, int(sc)))
+
+    # If none pass threshold, take best single fallback per echo (>= fallback_min)
+    if not candidates:
+        for i, ek in enumerate(ekeys):
+            best = process.extractOne(ek, ckeys, scorer=FUZZY_SCORER)
+            if best and best[1] >= fallback_min:
+                candidates.append((i, int(best[2]), int(best[1])))
+
+    # Greedy selection: highest score first, enforce uniqueness
+    candidates.sort(key=lambda t: t[2], reverse=True)
+    used_e: set[int] = set()
+    used_c: set[int] = set()
+    chosen: List[Tuple[int, int, int]] = []
+    for i, j, sc in candidates:
+        if i in used_e or j in used_c:
+            continue
+        chosen.append((i, j, sc))
+        used_e.add(i)
+        used_c.add(j)
+    return chosen
+
+
 # ---------- main builder ----------
 
 def build_echo_tables(echo_csv_file, canvas_order_df: pd.DataFrame) -> EchoTables:
@@ -150,7 +194,7 @@ def build_echo_tables(echo_csv_file, canvas_order_df: pd.DataFrame) -> EchoTable
             "Module", "Average View %", "# of Students Viewing", "Overall View %", "# of Students"
         ])
     else:
-        # Choose the best Canvas title column (duration already stripped in services for video_title_raw)
+        # Prefer duration-stripped Canvas title if available (from services.canvas)
         canvas_title_col = None
         for col in ["video_title_raw", "item_title_raw", "item_title_normalized"]:
             if col in canvas_order_df.columns:
@@ -164,43 +208,45 @@ def build_echo_tables(echo_csv_file, canvas_order_df: pd.DataFrame) -> EchoTable
             .copy()
         )
 
-        # Build clean keys
+        # Build normalized keys
         order["_ckey"] = _norm_series(order["Canvas Title"])
         es = echo_summary.copy()
         es["_ekey"] = _norm_series(es["Media Title"])
 
-        # Pass 1: exact key equality
+        # 1) Exact key equality joins first (fast path)
         m1 = order.merge(
             es[["_ekey", "Media Title", "Video Duration", "# of Unique Viewers", "Average View %"]],
             left_on="_ckey", right_on="_ekey", how="left"
         )
 
-        # Pass 2: fuzzy fallback (only for rows still unmatched)
-        unmatched = m1["Average View %"].isna()
-        if unmatched.any():
-            # Build an index of ekey -> row for fast lookup
-            ekeys = es["_ekey"].tolist()
-            # For each unmatched canvas row, find best echo key
-            rows: List[dict] = []
-            for idx, ckey in m1.loc[unmatched, "_ckey"].items():
-                if not ckey:
-                    continue
-                best = process.extractOne(ckey, ekeys, scorer=FUZZY_SCORER)
-                if best and best[1] >= FUZZY_THRESHOLD:
-                    ek = best[0]
+        # 2) Greedy one-to-one fuzzy matching for any rows still unmatched
+        unmatched_idx = m1.index[m1["Average View %"].isna()].tolist()
+        if unmatched_idx:
+            # Build unique lists aligned to row indices
+            ckeys = m1.loc[unmatched_idx, "_ckey"].fillna("").astype(str).tolist()
+            ekeys = es["_ekey"].fillna("").astype(str).tolist()
+
+            # Map back to DataFrame indices
+            pairs = _greedy_match(ekeys, ckeys, THRESHOLD, FALLBACK_MIN, TOP_K)
+            if pairs:
+                # Build a mapping from echo ek -> echo row, and canvas list position -> m1 index
+                # ekeys[i] is the echo key at i; ckeys[j] is the canvas key for m1 row unmatched_idx[j]
+                rows: List[dict] = []
+                for i, j, sc in pairs:
+                    m1_row_index = unmatched_idx[j]
+                    ek = ekeys[i]
                     erow = es.loc[es["_ekey"] == ek].iloc[0]
                     rows.append({
-                        "idx": idx,
+                        "idx": m1_row_index,
                         "Media Title": erow["Media Title"],
                         "Video Duration": erow["Video Duration"],
                         "# of Unique Viewers": erow["# of Unique Viewers"],
                         "Average View %": erow["Average View %"],
                     })
-            if rows:
-                m2 = pd.DataFrame(rows).set_index("idx")
-                fill_cols = ["Media Title", "Video Duration", "# of Unique Viewers", "Average View %"]
-                # 2D assign (shapes align)
-                m1.loc[m2.index, fill_cols] = m2[fill_cols].values
+                if rows:
+                    m2 = pd.DataFrame(rows).set_index("idx")
+                    fill_cols = ["Media Title", "Video Duration", "# of Unique Viewers", "Average View %"]
+                    m1.loc[m2.index, fill_cols] = m2[fill_cols].values
 
         # Aggregate by module
         have = m1.dropna(subset=["Average View %"])
