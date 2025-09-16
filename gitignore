@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.venv/
+venv/
+.env
+.env.*
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Caches / logs
+.cache/
+.ipynb_checkpoints/
+*.log
+
+# Editors/IDE
+.vscode/
+.idea/
+
+# Build / dist
+build/
+dist/
+
+# Coverage / test
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Ignore any large data dumps but keep our sample CSVs
+data/
+!samples/
