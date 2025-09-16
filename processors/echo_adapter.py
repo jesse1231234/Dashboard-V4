@@ -33,9 +33,9 @@ _READ_ONLY_RE     = re.compile(r"\s*\(read only\)\s*$", re.I)
 
 # Fuzzy matching knobs
 FUZZY_SCORER   = fuzz.token_set_ratio
-THRESHOLD      = 80     # accept >= this
+THRESHOLD      = 78     # accept >= this
 FALLBACK_MIN   = 70     # if nothing passes threshold, allow >= this
-TOP_K          = 6      # consider top K canvas candidates per echo
+TOP_K          = 8      # consider top K canvas candidates per echo
 
 
 # ---------- helpers ----------
