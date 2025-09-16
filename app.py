@@ -197,13 +197,13 @@ if st.session_state.get("results"):
 
     with tab2:
         if not gb_tables.module_assignment_metrics_df.empty:
-            st.plotly_chart(chart_gradebook_combo(gb_tables.module_assignment_metrics_df), use_container_width=True)
+            st.plotly_chart(chart_gradebook_combo(gb_tables.module_assignment_metrics_df, title="Canvas Data"), use_container_width=True)
         else:
             st.info("No module-level gradebook metrics to plot.")
 
         if not echo_tables.module_table.empty:
             st.plotly_chart(
-                chart_echo_combo(echo_tables.module_table, students_total=students_total),
+                chart_echo_combo(echo_tables.module_table, students_total=students_total, title="Echo Data"),
                 use_container_width=True
             )
 
@@ -234,6 +234,7 @@ if st.session_state.get("results"):
             to_csv_bytes(gb_tables.module_assignment_metrics_df),
             file_name="gradebook_module_metrics.csv",
         )
+
 
 
 
