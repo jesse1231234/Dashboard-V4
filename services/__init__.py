@@ -1,2 +1,1 @@
-# services/__init__.py
-# Makes 'services' a package; no code needed.
+# keep this file empty to avoid eager imports that can fail at startup
