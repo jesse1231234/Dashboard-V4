@@ -159,10 +159,11 @@ def build_echo_tables(echo_csv_file, canvas_order_df: pd.DataFrame) -> EchoTable
                 es2 = es.copy()
                 es2["_key"] = _norm_series(es2["Media Title"])
                 m2 = order2.merge(es2, on="_key", how="left").drop(columns=["_key"])
-                # fill only where missing
+
+                # Directly assign the matched columns (shapes align: n_unmatched x 4)
                 fill_cols = ["Media Title", "Video Duration", "# of Unique Viewers", "Average View %"]
-                for c in fill_cols:
-                    m1.loc[unmatched, c] = m1.loc[unmatched, c].fillna(m2[c].values if c in m2 else np.nan)
+                m1.loc[unmatched, fill_cols] = m2[fill_cols].values
+
 
             # Aggregate by module
             have = m1.dropna(subset=["Average View %"])
