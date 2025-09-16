@@ -1,4 +1,5 @@
 import io
+import os
 from typing import Optional
 
 import pandas as pd
@@ -13,8 +14,18 @@ from ui.kpis import compute_kpis
 st.set_page_config(page_title="Canvas/Echo Dashboard", layout="wide")
 
 NOTICE = "No identifying information will be present in this analysis. All data will be de-identified."
-DEFAULT_BASE_URL = st.secrets.get("CANVAS_BASE_URL", "https://colostate.instructure.com")
-TOKEN = st.secrets.get("CANVAS_TOKEN", "")
+DEFAULT_BASE_URL = st.secrets.get(
+    "CANVAS_BASE_URL",
+    os.getenv("CANVAS_BASE_URL", "https://colostate.instructure.com")
+)
+TOKEN = (st.secrets.get("CANVAS_TOKEN") or os.getenv("CANVAS_TOKEN") or "").strip()
+
+# DEBUG (safe): shows which secret keys exist; does NOT print the token itself
+st.sidebar.write("Secrets keys:", list(st.secrets.keys()))
+st.sidebar.write(
+    "CANVAS_TOKEN present:",
+    ("CANVAS_TOKEN" in st.secrets) and bool(st.secrets.get("CANVAS_TOKEN"))
+)
 
 # ---------------- Caching helpers ----------------
 @st.cache_resource(show_spinner=False)
@@ -199,3 +210,4 @@ if st.session_state.get("results"):
             to_csv_bytes(gb_tables.module_assignment_metrics_df),
             file_name="gradebook_module_metrics.csv",
         )
+
