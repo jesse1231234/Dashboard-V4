@@ -32,8 +32,9 @@ def fetch_student_count(base_url: str, token: str, course_id: str) -> Optional[i
     return svc.get_student_count(int(course_id))
 
 @st.cache_data(show_spinner=True)
-def run_echo_tables(file_bytes: bytes, canvas_df: pd.DataFrame):
-    return build_echo_tables(io.BytesIO(file_bytes), canvas_df)
+def run_echo_tables(file_bytes: bytes, canvas_df: pd.DataFrame, students_total: Optional[int]):
+    return build_echo_tables(io.BytesIO(file_bytes), canvas_df, class_total_students=students_total)
+
 
 @st.cache_data(show_spinner=True)
 def run_gradebook_tables(file_bytes: bytes, canvas_df: pd.DataFrame):
@@ -108,7 +109,12 @@ elif st.session_state.step == 2:
     if echo_csv and st.button("Continue"):
         try:
             with st.spinner("Processing Echo data..."):
-                st.session_state["echo"] = run_echo_tables(echo_csv.getvalue(), st.session_state["canvas"])
+                st.session_state["echo"] = run_echo_tables(
+                    echo_csv.getvalue(),
+                    st.session_state["canvas"],
+                    st.session_state.get("student_count"),
+                )
+
                 st.session_state.step = 3
                 st.rerun()
         except Exception as e:
@@ -228,6 +234,7 @@ if st.session_state.get("results"):
             to_csv_bytes(gb_tables.module_assignment_metrics_df),
             file_name="gradebook_module_metrics.csv",
         )
+
 
 
 
