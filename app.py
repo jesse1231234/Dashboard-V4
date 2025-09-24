@@ -132,6 +132,18 @@ elif st.session_state.step == 3:
                 st.rerun()
         except Exception as e:
             st.error(f"Gradebook processing error: {e}")
+#-----------------Percentage Helper---------
+    def _percentize_for_display(df: pd.DataFrame, percent_cols: list[str], decimals: int = 1):
+    """Return (copy_of_df_with_cols×100) and a Streamlit column_config for % formatting."""
+    disp = df.copy()
+    for col in percent_cols:
+        if col in disp.columns:
+            disp[col] = pd.to_numeric(disp[col], errors="coerce") * 100.0
+    cfg = {
+        col: st.column_config.NumberColumn(col, format=f"%.{decimals}f%%")
+        for col in percent_cols if col in disp.columns
+    }
+    return disp, cfg
 
 # ---------------- Dashboard ----------------
 if st.session_state.get("results"):
@@ -184,16 +196,38 @@ if st.session_state.get("results"):
 
     with tab1:
         st.subheader("Echo Summary (per media)")
-        st.dataframe(echo_tables.echo_summary, use_container_width=True)
+        es_disp, es_cfg = _percentize_for_display(
+            echo_tables.echo_summary,
+            ["Average View %", "% of Students Viewing", "% of Video Viewed Overall"]
+        )
+        st.dataframe(es_disp, use_container_width=True, column_config=es_cfg)
+
 
         st.subheader("Echo Module Table")
-        st.dataframe(echo_tables.module_table, use_container_width=True)
+        em_disp, em_cfg = _percentize_for_display(
+            echo_tables.module_table,
+            ["Average View %", "Overall View %"]
+        )
+        st.dataframe(em_disp, use_container_width=True, column_config=em_cfg)
+
 
         st.subheader("Gradebook Summary Rows")
-        st.dataframe(gb_tables.gradebook_summary_df, use_container_width=True)
+        gb_sum_disp = gb_tables.gradebook_summary_df.copy()
+        # all columns are fractions → scale to %
+        gb_sum_disp = gb_sum_disp.apply(pd.to_numeric, errors="coerce") * 100.0
+        gb_sum_cfg = {
+            col: st.column_config.NumberColumn(col, format="%.1f%%")
+            for col in gb_sum_disp.columns
+        }
+        st.dataframe(gb_sum_disp, use_container_width=True, column_config=gb_sum_cfg)
+
 
         st.subheader("Gradebook Module Metrics")
-        st.dataframe(gb_tables.module_assignment_metrics_df, use_container_width=True)
+        gm_disp, gm_cfg = _percentize_for_display(
+            gb_tables.module_assignment_metrics_df,
+            ["Avg % Turned In", "Avg Average Excluding Zeros"]
+        )
+        st.dataframe(gm_disp, use_container_width=True, column_config=gm_cfg)
 
     with tab2:
         if not gb_tables.module_assignment_metrics_df.empty:
@@ -234,6 +268,7 @@ if st.session_state.get("results"):
             to_csv_bytes(gb_tables.module_assignment_metrics_df),
             file_name="gradebook_module_metrics.csv",
         )
+
 
 
 
