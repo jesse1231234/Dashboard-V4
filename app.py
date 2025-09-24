@@ -137,7 +137,7 @@ if st.session_state.step == 1:
     st.header("Step 1 — Canvas Course Number")
     st.info(NOTICE)
     base_url = st.text_input("Canvas Base URL", value=DEFAULT_BASE_URL)
-    course_id = st.text_input("Please provide the Canvas Course Number contained in the URL for the Canvas Course you are analyzing.")
+    course_id = st.text_input("Please provide the Canvas Course Number contained in the URL for the Canvas Course you are analyzing. For example, if the URL for your home page is 'https://colostate.instructure.com/courses/123456', then 123456 is your Canvas Course Number")
     if not TOKEN:
         st.warning("Missing CANVAS_TOKEN in Streamlit secrets. Add it before continuing.")
     if st.button("Continue") and base_url and course_id and TOKEN:
@@ -307,6 +307,7 @@ if st.session_state.get("results"):
             to_csv_bytes(gb_tables.module_assignment_metrics_df),
             file_name="gradebook_module_metrics.csv",
         )
+
 
 
 
