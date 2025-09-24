@@ -36,7 +36,7 @@ def chart_gradebook_combo(df: pd.DataFrame, title: str = "Canvas Data") -> go.Fi
         name="Avg Excl Zeros", hovertemplate="%{y:.1f}%<extra>Avg Excl Zeros</extra>"
     ))
 
-    fig.update_yaxes(title_text="Percent", range=[0, 100], ticksuffix="%")
+    fig.update_yaxes(title_text="Percent", autorange=True, rangemode="tozero", ticksuffix="%")
     fig.update_xaxes(title_text="Module")
     fig.update_layout(
         title=title,
@@ -124,14 +124,22 @@ def chart_echo_combo(
         )
 
     fig.update_layout(
-        title=title,
-        barmode="stack",  # keep stacked so (Viewed + Not Viewed) = Total
-        yaxis=dict(title="Students", range=[0, y_max]),
-        yaxis2=dict(title="Percent", overlaying="y", side="right", range=[0, 100], ticksuffix="%"),
+        title=title,                  # keep your existing title var
+        barmode="stack",
+        yaxis=dict(title="Students", autorange=True, rangemode="tozero"),
+        yaxis2=dict(
+            title="Percent",
+            overlaying="y",           # <-- important, keeps lines on a right-hand axis
+            side="right",
+            autorange=True,
+            rangemode="tozero",
+            ticksuffix="%",
+        ),
         margin=dict(l=10, r=10, t=40, b=10),
         legend=dict(orientation="h"),
         hovermode="x unified",
     )
+
 
     # Optional dotted line at total (visual anchor)
     if students_total:
