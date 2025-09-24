@@ -100,12 +100,13 @@ def compute_kpis(
             avg_assignment_frac = float(row.mean())  # keep as fraction (0..1). UI multiplies by 100.
 
     return {
-        "Number of Students": n_students,
+        "# Students": n_students,
         "Average Grade": avg_grade,  # 0..100 or None
         "Median Letter Grade": med_letter,
         "Average Echo360 engagement": avg_echo_pct,  # 0..100 or None
-        "Number of Fs": num_fs,
+        "# of Fs": num_fs,
         "Avg Assignment Grade (class)": avg_assignment_frac,  # fraction 0..1 or None
     }
+
 
 
