@@ -69,6 +69,20 @@ def sort_by_canvas_order(df: pd.DataFrame, module_col: str, canvas_df: pd.DataFr
     out[module_col] = out[module_col].astype(str)
     return out
 
+# --- Table display helper (place at top level, not inside another function) ---
+def _percentize_for_display(df: pd.DataFrame, percent_cols: list[str], decimals: int = 1):
+    """
+    Return (copy_of_df_with_selected_cols*100) and a Streamlit column_config for % formatting.
+    """
+    disp = df.copy()
+    for col in percent_cols:
+        if col in disp.columns:
+            disp[col] = pd.to_numeric(disp[col], errors="coerce") * 100.0
+    cfg = {
+        col: st.column_config.NumberColumn(col, format=f"%.{decimals}f%%")
+        for col in percent_cols if col in disp.columns
+    }
+    return disp, cfg
 
 # ---------------- Wizard UI ----------------
 st.session_state.setdefault("step", 1)
@@ -132,19 +146,7 @@ elif st.session_state.step == 3:
                 st.rerun()
         except Exception as e:
             st.error(f"Gradebook processing error: {e}")
-#-----------------Percentage Helper---------
-    def _percentize_for_display(df: pd.DataFrame, percent_cols: list[str], decimals: int = 1):
-    """Return (copy_of_df_with_cols×100) and a Streamlit column_config for % formatting."""
-    disp = df.copy()
-    for col in percent_cols:
-        if col in disp.columns:
-            disp[col] = pd.to_numeric(disp[col], errors="coerce") * 100.0
-    cfg = {
-        col: st.column_config.NumberColumn(col, format=f"%.{decimals}f%%")
-        for col in percent_cols if col in disp.columns
-    }
-    return disp, cfg
-
+            
 # ---------------- Dashboard ----------------
 if st.session_state.get("results"):
     echo_tables = st.session_state["echo"]
@@ -268,6 +270,7 @@ if st.session_state.get("results"):
             to_csv_bytes(gb_tables.module_assignment_metrics_df),
             file_name="gradebook_module_metrics.csv",
         )
+
 
 
 
