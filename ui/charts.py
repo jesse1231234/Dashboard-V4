@@ -40,8 +40,8 @@ def chart_gradebook_combo(df: pd.DataFrame, title: str = "Canvas Data") -> go.Fi
     fig.update_xaxes(title_text="Module")
     fig.update_layout(
         title=title,
-        margin=dict(l=10, r=10, t=40, b=10),
-        legend=dict(orientation="h"),
+        margin=dict(l=10, r=10, t=70, b=30),
+        legend=dict(orientation="h", yanchor="bottom", y=1.06, xanchor="left", x=0.0, bgcolor="rgba(0,0,0,0)"),
         hovermode="x unified",
     )
     return fig
@@ -135,8 +135,8 @@ def chart_echo_combo(
             rangemode="tozero",
             ticksuffix="%",
         ),
-        margin=dict(l=10, r=10, t=40, b=10),
-        legend=dict(orientation="h"),
+        margin=dict(l=10, r=10, t=70, b=30),
+        legend=dict(orientation="h", yanchor="bottom", y=1.06, xanchor="left", x=0.0, bgcolor="rgba(0,0,0,0)"),
         hovermode="x unified",
     )
 
