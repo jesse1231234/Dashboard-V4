@@ -12,6 +12,43 @@ from ui.kpis import compute_kpis
 
 st.set_page_config(page_title="Canvas/Echo Dashboard", layout="wide")
 
+st.markdown("""
+<style>
+/* Global tweaks */
+html, body, [class*="css"] { -webkit-font-smoothing: antialiased; }
+
+/* Page padding/width */
+section.main > div { padding-top: .5rem; }
+.block-container { padding-top: 1rem; padding-bottom: 2rem; }
+
+/* Headings */
+h1, h2, h3 { letter-spacing: .2px; }
+
+/* KPI cards (style st.metric) */
+div[data-testid="stMetric"]{
+  background: var(--secondary-background-color, rgba(0,0,0,0.03));
+  border: 1px solid rgba(0,0,0,0.06);
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.06);
+}
+div[data-testid="stMetric"] label { opacity: .75; font-size: .9rem; }
+div[data-testid="stMetric"] [data-testid="stMetricValue"]{ font-weight: 700; }
+
+/* Tabs */
+div[role="tablist"] { gap: 6px; }
+button[role="tab"]{
+  border-radius: 999px !important;
+  padding: 6px 14px !important;
+}
+
+/* DataFrames: cleaner header line */
+[data-testid="stDataFrame"] thead tr th {
+  border-bottom: 1px solid rgba(0,0,0,0.08) !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 NOTICE = "No identifying information will be present in this analysis. All data will be de-identified."
 DEFAULT_BASE_URL = st.secrets.get("CANVAS_BASE_URL", "https://colostate.instructure.com")
 TOKEN = st.secrets.get("CANVAS_TOKEN", "")
@@ -270,6 +307,7 @@ if st.session_state.get("results"):
             to_csv_bytes(gb_tables.module_assignment_metrics_df),
             file_name="gradebook_module_metrics.csv",
         )
+
 
 
 
