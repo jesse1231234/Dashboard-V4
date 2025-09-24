@@ -46,11 +46,11 @@ def compute_kpis(
 ) -> Dict[str, Optional[float | int | str]]:
     """
     Returns a dict with:
-      - "Number of Students" (int)
+      - "# Students" (int)
       - "Average Grade" (numeric 0..100)
       - "Median Letter Grade" (str)
       - "Average Echo360 engagement" (0..100)
-      - "Number of Fs" (int)
+      - "# of Fs" (int)
       - "Avg Assignment Grade (class)" (fraction 0..1)
     """
     # ---------- # Students ----------
@@ -107,6 +107,7 @@ def compute_kpis(
         "# of Fs": num_fs,
         "Avg Assignment Grade (class)": avg_assignment_frac,  # fraction 0..1 or None
     }
+
 
 
 
