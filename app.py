@@ -310,7 +310,7 @@ if st.session_state.get("results"):
             file_name="gradebook_module_metrics.csv",
         )
 
-      with tab4:
+    with tab4:
         st.subheader("AI Analysis")
         st.caption("No identifying information will be present in this analysis. All data will be de-identified.")
 
@@ -341,3 +341,4 @@ if st.session_state.get("results"):
                         st.markdown(text)
                     except Exception as e:
                         st.error(f"AI analysis failed: {e}")
+
