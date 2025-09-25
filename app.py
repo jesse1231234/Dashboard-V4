@@ -9,6 +9,8 @@ from processors.echo_adapter import build_echo_tables
 from processors.grades_adapter import build_gradebook_tables
 from ui.charts import chart_gradebook_combo, chart_echo_combo
 from ui.kpis import compute_kpis
+from ai.analysis import generate_analysis
+import os
 
 st.set_page_config(page_title="Canvas/Echo Dashboard", layout="wide")
 
@@ -231,7 +233,7 @@ if st.session_state.get("results"):
     avg_assign = kpis.get("Avg Assignment Grade (class)")
     c6.metric("Avg Assignment Grade", f"{avg_assign*100:.1f}%" if avg_assign is not None else "—")
 
-    tab1, tab2, tab3 = st.tabs(["Tables", "Charts", "Exports"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Tables", "Charts", "Exports", "AI Analysis"])
 
     with tab1:
         st.subheader("Echo Summary (per media)")
@@ -308,15 +310,34 @@ if st.session_state.get("results"):
             file_name="gradebook_module_metrics.csv",
         )
 
+      with tab4:
+        st.subheader("AI Analysis")
+        st.caption("No identifying information will be present in this analysis. All data will be de-identified.")
 
+        # Model + settings
+        colA, colB = st.columns([2,1])
+        with colA:
+            model = st.selectbox("Model", ["gpt-4o-mini", "gpt-4.1-mini", "gpt-4.1"], index=0)
+        with colB:
+            temperature = st.slider("Creativity", 0.0, 1.0, 0.3, 0.1)
 
-
-
-
-
-
-
-
-
-
-
+        # Confirm key present (use st.secrets or env)
+        openai_key = st.secrets.get("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY", ""))
+        if not openai_key:
+            st.warning("Add OPENAI_API_KEY to Streamlit secrets to enable AI analysis.")
+        else:
+            # Button to generate
+            if st.button("Generate analysis"):
+                with st.spinner("Analyzing your dashboard data..."):
+                    try:
+                        text = generate_analysis(
+                            kpis=kpis,
+                            echo_module_df=echo_tables.module_table if echo_tables else None,
+                            gradebook_module_df=gb_tables.module_assignment_metrics_df if gb_tables else None,
+                            gradebook_summary_df=gb_tables.gradebook_summary_df if gb_tables else None,
+                            model=model,
+                            temperature=temperature,
+                        )
+                        st.markdown(text)
+                    except Exception as e:
+                        st.error(f"AI analysis failed: {e}")
