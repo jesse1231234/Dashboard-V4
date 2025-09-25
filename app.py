@@ -51,6 +51,7 @@ button[role="tab"]{
 </style>
 """, unsafe_allow_html=True)
 
+NOTICE = "No identifying information will be present in this analysis. All data will be de-identified."
 DEFAULT_BASE_URL = st.secrets.get("CANVAS_BASE_URL", "https://colostate.instructure.com")
 TOKEN = st.secrets.get("CANVAS_TOKEN", "")
 
@@ -124,7 +125,6 @@ def _percentize_for_display(df: pd.DataFrame, percent_cols: list[str], decimals:
 
 # ---------------- Wizard UI ----------------
 st.session_state.setdefault("step", 1)
-st.info(NOTICE)
 
 with st.sidebar:
     st.markdown("### Controls")
@@ -340,5 +340,6 @@ if st.session_state.get("results"):
                         st.markdown(text)
                     except Exception as e:
                         st.error(f"AI analysis failed: {e}")
+
 
 
