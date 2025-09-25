@@ -6,11 +6,12 @@ import pandas as pd
 from openai import OpenAI
 
 SYSTEM_PROMPT = """You are an academic learning analytics assistant.
-Write a concise, plain-English analysis for instructors.
+Write a concise, plain-English analysis for instructors teaching online asychronous courses.
 Rules:
 - No identifying info about students; use only aggregates.
 - Be specific: cite modules and metrics with percentages/counts.
-- Call out trends, outliers, and actionable suggestions.
+- Call out trends and outliers.
+- Focus on suggestions of how to interpret the data instead of direct applications to the classroom.
 - Keep it under ~300 words unless asked for more.
 """
 
