@@ -51,7 +51,6 @@ button[role="tab"]{
 </style>
 """, unsafe_allow_html=True)
 
-NOTICE = "No identifying information will be present in this analysis. All data will be de-identified."
 DEFAULT_BASE_URL = st.secrets.get("CANVAS_BASE_URL", "https://colostate.instructure.com")
 TOKEN = st.secrets.get("CANVAS_TOKEN", "")
 
@@ -341,4 +340,5 @@ if st.session_state.get("results"):
                         st.markdown(text)
                     except Exception as e:
                         st.error(f"AI analysis failed: {e}")
+
 
