@@ -5,3 +5,4 @@ httpx
 rapidfuzz
 beautifulsoup4
 plotly
+openai>=1.40
