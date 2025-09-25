@@ -12,6 +12,7 @@ Rules:
 - Be specific: cite modules and metrics with percentages/counts.
 - Call out trends and outliers.
 - Focus on suggestions of how to interpret the data instead of direct applications to the classroom.
+- Do not make teaching recommendations. Only report on the data.
 - Keep it under ~300 words unless asked for more.
 """
 
