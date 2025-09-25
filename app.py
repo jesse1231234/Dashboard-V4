@@ -14,6 +14,38 @@ import os
 
 st.set_page_config(page_title="Canvas/Echo Dashboard", layout="wide")
 
+# Centering toggle (wizard only)
+_CSS_SLOT = st.empty()
+
+def _set_wizard_center(on: bool):
+    if on:
+        _CSS_SLOT.markdown(
+            """
+            <style>
+            /* Make the main content fill the viewport and center it vertically */
+            section.main > div.block-container{
+              min-height: 85vh;              /* enough height to center without clipping */
+              display: flex;
+              flex-direction: column;
+              justify-content: center;       /* vertical centering */
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        _CSS_SLOT.markdown(
+            """
+            <style>
+            section.main > div.block-container{
+              min-height: auto;
+              display: block;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+
 st.markdown("""
 <style>
 /* Global tweaks */
@@ -340,6 +372,7 @@ if st.session_state.get("results"):
                         st.markdown(text)
                     except Exception as e:
                         st.error(f"AI analysis failed: {e}")
+
 
 
 
