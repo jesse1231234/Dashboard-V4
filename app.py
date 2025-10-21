@@ -13,6 +13,8 @@ from ai.analysis import generate_analysis
 import os
 
 st.set_page_config(page_title="Canvas/Echo Dashboard", layout="wide")
+from ui.theme import apply_theme, hero
+apply_theme()
 
 # Centering toggle (wizard only)
 _CSS_SLOT = st.empty()
@@ -169,7 +171,7 @@ with st.sidebar:
     _set_wizard_center(st.session_state.get("step", 1) in (1, 2, 3))
 
 
-if st.session_state.step == 1:
+_state.step == 1:
     st.header("Step 1 — Canvas Course Number")
     st.info(NOTICE)
     base_url = st.text_input("Canvas Base URL", value=DEFAULT_BASE_URL)
@@ -189,7 +191,7 @@ if st.session_state.step == 1:
         except Exception as e:
             st.error(f"Canvas error: {e}")
 
-elif st.session_state.step == 2:
+el_state.step == 2:
     st.header("Step 2 — Echo CSV")
     st.info(NOTICE)
     echo_csv = st.file_uploader("Please provide the CSV file containing your course's Echo data.", type=["csv"])
@@ -207,7 +209,7 @@ elif st.session_state.step == 2:
         except Exception as e:
             st.error(f"Echo processing error: {e}")
 
-elif st.session_state.step == 3:
+el_state.step == 3:
     st.header("Step 3 — Gradebook CSV")
     st.info(NOTICE)
     gb_csv = st.file_uploader("Please provide the CSV file containing your gradebook data.", type=["csv"])
@@ -375,6 +377,7 @@ if st.session_state.get("results"):
                         st.markdown(text)
                     except Exception as e:
                         st.error(f"AI analysis failed: {e}")
+
 
 
 
