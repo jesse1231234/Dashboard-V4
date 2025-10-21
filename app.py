@@ -165,9 +165,6 @@ with st.sidebar:
             st.session_state.pop(k, None)
         st.session_state.step = 1
         st.rerun()
-        # Before rendering any step UI:
-    _set_wizard_center(st.session_state.get("step", 1) in (1, 2, 3))
-
 
 if st.session_state.step == 1:
     st.header("Step 1 — Canvas Course Number")
@@ -375,7 +372,6 @@ if st.session_state.get("results"):
                         st.markdown(text)
                     except Exception as e:
                         st.error(f"AI analysis failed: {e}")
-
 
 
 
