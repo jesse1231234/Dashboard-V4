@@ -13,8 +13,6 @@ from ai.analysis import generate_analysis
 import os
 
 st.set_page_config(page_title="Canvas/Echo Dashboard", layout="wide")
-from ui.theme import apply_theme, hero
-apply_theme()
 
 # Centering toggle (wizard only)
 _CSS_SLOT = st.empty()
@@ -159,76 +157,65 @@ def _percentize_for_display(df: pd.DataFrame, percent_cols: list[str], decimals:
 
 # ---------------- Wizard UI ----------------
 st.session_state.setdefault("step", 1)
-_state = st.session_state
 
 with st.sidebar:
     st.markdown("### Controls")
     if st.button("Restart wizard"):
         for k in ["canvas", "echo", "grades", "results", "base_url", "course_id", "student_count"]:
-            _state.pop(k, None)
-        _state.step = 1
+            st.session_state.pop(k, None)
+        st.session_state.step = 1
         st.rerun()
+        # Before rendering any step UI:
+    _set_wizard_center(st.session_state.get("step", 1) in (1, 2, 3))
 
-# Center steps 1–3 (call this BEFORE rendering any step UI)
-_set_wizard_center(_state.step in (1, 2, 3))
 
-# ---- Step 1 ----
-if _state.step == 1:
+if st.session_state.step == 1:
     st.header("Step 1 — Canvas Course Number")
     st.info(NOTICE)
     base_url = st.text_input("Canvas Base URL", value=DEFAULT_BASE_URL)
-    course_id = st.text_input(
-        "Please provide the Canvas Course Number contained in the URL for the Canvas Course you are analyzing. "
-        "For example, if the URL for your home page is 'https://colostate.instructure.com/courses/123456', "
-        "then 123456 is your Canvas Course Number"
-    )
+    course_id = st.text_input("Please provide the Canvas Course Number contained in the URL for the Canvas Course you are analyzing. For example, if the URL for your home page is 'https://colostate.instructure.com/courses/123456', then 123456 is your Canvas Course Number")
     if not TOKEN:
         st.warning("Missing CANVAS_TOKEN in Streamlit secrets. Add it before continuing.")
-
     if st.button("Continue") and base_url and course_id and TOKEN:
         try:
             with st.spinner("Fetching Canvas module order..."):
                 canvas_df = fetch_canvas_order_df(base_url, TOKEN, course_id)
-                _state["canvas"] = canvas_df
-                _state["base_url"] = base_url
-                _state["course_id"] = course_id
-                _state["student_count"] = fetch_student_count(base_url, TOKEN, course_id)  # may be None
-                _state.step = 2
+                st.session_state["canvas"] = canvas_df
+                st.session_state["base_url"] = base_url
+                st.session_state["course_id"] = course_id
+                st.session_state["student_count"] = fetch_student_count(base_url, TOKEN, course_id)  # may be None
+                st.session_state.step = 2
                 st.rerun()
         except Exception as e:
             st.error(f"Canvas error: {e}")
 
-# ---- Step 2 ----
-elif _state.step == 2:
+elif st.session_state.step == 2:
     st.header("Step 2 — Echo CSV")
     st.info(NOTICE)
-    echo_csv = st.file_uploader("Please provide the CSV file containing your course's Echo data.", type=["csv"], key="echo_upload")
-
-    if echo_csv and st.button("Continue", key="echo_continue"):
+    echo_csv = st.file_uploader("Please provide the CSV file containing your course's Echo data.", type=["csv"])
+    if echo_csv and st.button("Continue"):
         try:
             with st.spinner("Processing Echo data..."):
-                _state["echo"] = run_echo_tables(
+                st.session_state["echo"] = run_echo_tables(
                     echo_csv.getvalue(),
-                    _state["canvas"],
-                    _state.get("student_count"),
+                    st.session_state["canvas"],
+                    st.session_state.get("student_count"),
                 )
-                _state.step = 3
+
+                st.session_state.step = 3
                 st.rerun()
         except Exception as e:
             st.error(f"Echo processing error: {e}")
 
-# ---- Step 3 ----
-elif _state.step == 3:
+elif st.session_state.step == 3:
     st.header("Step 3 — Gradebook CSV")
     st.info(NOTICE)
-    gb_csv = st.file_uploader("Please provide the CSV file containing your gradebook data.", type=["csv"], key="gradebook_upload")
-
-    if gb_csv and st.button("Process & View Dashboard", key="gradebook_process"):
+    gb_csv = st.file_uploader("Please provide the CSV file containing your gradebook data.", type=["csv"])
+    if gb_csv and st.button("Process & View Dashboard"):
         try:
             with st.spinner("Processing gradebook data..."):
-                _state["grades"] = run_gradebook_tables(gb_csv.getvalue(), _state["canvas"])
-                _state["results"] = True
-                _state.step = 4  # advance to dashboard step
+                st.session_state["grades"] = run_gradebook_tables(gb_csv.getvalue(), st.session_state["canvas"])
+                st.session_state["results"] = True
                 st.rerun()
         except Exception as e:
             st.error(f"Gradebook processing error: {e}")
@@ -388,9 +375,6 @@ if st.session_state.get("results"):
                         st.markdown(text)
                     except Exception as e:
                         st.error(f"AI analysis failed: {e}")
-
-
-
 
 
 
