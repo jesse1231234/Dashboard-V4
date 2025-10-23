@@ -1,5 +1,6 @@
 import io
-from typing import Optional
+from collections.abc import Iterator
+from typing import Mapping, Optional
 
 import pandas as pd
 import streamlit as st
@@ -8,13 +9,21 @@ from services.canvas import CanvasService
 from processors.echo_adapter import build_echo_tables
 from processors.grades_adapter import build_gradebook_tables
 from ui.charts import chart_gradebook_combo, chart_echo_combo
+from ui.helptext import HELP
 from ui.kpis import compute_kpis
 from ai.analysis import generate_analysis
 import os
+from pandas.api import types as ptypes
 
 st.set_page_config(page_title="Canvas/Echo Dashboard", layout="wide")
 from ui.theme import apply_theme, hero
 apply_theme()
+
+hero(
+    "Canvas & Echo Insights",
+    "Upload your Canvas course number and CSV exports to explore engagement, grading, and AI-generated takeaways in a unified dashboard.",
+    emoji="✨",
+)
 
 # Centering toggle (wizard only)
 _CSS_SLOT = st.empty()
@@ -48,51 +57,46 @@ def _set_wizard_center(on: bool):
             unsafe_allow_html=True,
         )
 
-st.markdown("""
-<style>
-/* Global tweaks */
-html, body, [class*="css"] { -webkit-font-smoothing: antialiased; }
-
-/* Page padding/width */
-section.main > div { padding-top: .5rem; }
-.block-container { padding-top: 1rem; padding-bottom: 2rem; }
-
-/* Headings */
-h1, h2, h3 { letter-spacing: .2px; }
-
-/* KPI cards (style st.metric) */
-div[data-testid="stMetric"]{
-  background: var(--secondary-background-color, rgba(0,0,0,0.03));
-  border: 1px solid rgba(0,0,0,0.06);
-  border-radius: 12px;
-  padding: 14px 16px;
-  box-shadow: 0 1px 3px rgba(0,0,0,.06);
-}
-div[data-testid="stMetric"] label { opacity: .75; font-size: .9rem; }
-div[data-testid="stMetric"] [data-testid="stMetricValue"]{ font-weight: 700; }
-
-/* Tabs */
-div[role="tablist"] { gap: 6px; }
-button[role="tab"]{
-  border-radius: 999px !important;
-  padding: 6px 14px !important;
-}
-
-/* DataFrames: cleaner header line */
-[data-testid="stDataFrame"] thead tr th {
-  border-bottom: 1px solid rgba(0,0,0,0.08) !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
 NOTICE = "No identifying information will be present in this analysis. All data will be de-identified."
 DEFAULT_BASE_URL = st.secrets.get("CANVAS_BASE_URL", "https://colostate.instructure.com")
 TOKEN = st.secrets.get("CANVAS_TOKEN", "")
 
+
+def render_notice(text: str, icon: str = "🔐") -> None:
+    st.markdown(
+        f"""
+        <div class="callout">
+          <span class="callout__icon">{icon}</span>
+          <div class="callout__body">{text}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def step_header(step: int, title: str, subtitle: str | None = None, emoji: str | None = None) -> None:
+    icon = f"{emoji} " if emoji else ""
+    st.markdown(
+        f"""
+        <div class="step-header">
+          <span class="step-header__badge">{step}</span>
+          <div>
+            <div class="step-header__title">{icon}{title}</div>
+            {f"<div class='step-header__subtitle'>{subtitle}</div>" if subtitle else ""}
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 # ---------------- Caching helpers ----------------
 @st.cache_resource(show_spinner=False)
-def get_canvas_service(base_url: str, token: str) -> CanvasService:
-    return CanvasService(base_url, token)
+def get_canvas_service(base_url: str, token: str) -> Iterator[CanvasService]:
+    svc = CanvasService(base_url, token)
+    try:
+        yield svc
+    finally:
+        svc.close()
 
 @st.cache_resource(show_spinner=True)
 def fetch_canvas_order_df(base_url: str, token: str, course_id: str) -> pd.DataFrame:
@@ -143,18 +147,32 @@ def sort_by_canvas_order(df: pd.DataFrame, module_col: str, canvas_df: pd.DataFr
     return out
 
 # --- Table display helper (place at top level, not inside another function) ---
-def _percentize_for_display(df: pd.DataFrame, percent_cols: list[str], decimals: int = 1):
+def _percentize_for_display(
+    df: pd.DataFrame,
+    percent_cols: list[str],
+    decimals: int = 1,
+    help_text: str = "Default",
+    help_overrides: Mapping[str, str] | None = None,
+):
     """
     Return (copy_of_df_with_selected_cols*100) and a Streamlit column_config for % formatting.
     """
     disp = df.copy()
-    for col in percent_cols:
-        if col in disp.columns:
+    percent_set = set(percent_cols)
+    cfg: dict[str, object] = {}
+    for col in disp.columns:
+        col_help = help_overrides.get(col, help_text) if help_overrides else help_text
+        if col in percent_set:
             disp[col] = pd.to_numeric(disp[col], errors="coerce") * 100.0
-    cfg = {
-        col: st.column_config.NumberColumn(col, format=f"%.{decimals}f%%")
-        for col in percent_cols if col in disp.columns
-    }
+            cfg[col] = st.column_config.NumberColumn(
+                label=col,
+                format=f"%.{decimals}f%%",
+                help=col_help,
+            )
+        elif ptypes.is_numeric_dtype(disp[col]):
+            cfg[col] = st.column_config.NumberColumn(label=col, help=col_help)
+        else:
+            cfg[col] = st.column_config.Column(label=col, help=col_help)
     return disp, cfg
 
 # ---------------- Wizard UI ----------------
@@ -174,8 +192,13 @@ _set_wizard_center(_state.step in (1, 2, 3))
 
 # ---- Step 1 ----
 if _state.step == 1:
-    st.header("Step 1 — Canvas Course Number")
-    st.info(NOTICE)
+    step_header(
+        1,
+        "Connect to your Canvas course",
+        "Enter your Canvas domain and course number so we can pull module context for the dashboard.",
+        emoji="🧭",
+    )
+    render_notice(NOTICE)
     base_url = st.text_input("Canvas Base URL", value=DEFAULT_BASE_URL)
     course_id = st.text_input(
         "Please provide the Canvas Course Number contained in the URL for the Canvas Course you are analyzing. "
@@ -200,8 +223,13 @@ if _state.step == 1:
 
 # ---- Step 2 ----
 elif _state.step == 2:
-    st.header("Step 2 — Echo CSV")
-    st.info(NOTICE)
+    step_header(
+        2,
+        "Upload Echo engagement CSV",
+        "We use this file to chart viewing behavior across modules.",
+        emoji="🎬",
+    )
+    render_notice(NOTICE)
     echo_csv = st.file_uploader("Please provide the CSV file containing your course's Echo data.", type=["csv"], key="echo_upload")
 
     if echo_csv and st.button("Continue", key="echo_continue"):
@@ -219,8 +247,13 @@ elif _state.step == 2:
 
 # ---- Step 3 ----
 elif _state.step == 3:
-    st.header("Step 3 — Gradebook CSV")
-    st.info(NOTICE)
+    step_header(
+        3,
+        "Upload Canvas gradebook CSV",
+        "We'll marry assignment performance with your Echo engagement results.",
+        emoji="📝",
+    )
+    render_notice(NOTICE)
     gb_csv = st.file_uploader("Please provide the CSV file containing your gradebook data.", type=["csv"], key="gradebook_upload")
 
     if gb_csv and st.button("Process & View Dashboard", key="gradebook_process"):
@@ -235,6 +268,8 @@ elif _state.step == 3:
             
 # ---------------- Dashboard ----------------
 if st.session_state.get("results"):
+    st.divider()
+    st.markdown("### 📊 Dashboard overview")
     echo_tables = st.session_state["echo"]
     gb_tables = st.session_state["grades"]
     canvas_df = st.session_state["canvas"]
@@ -270,15 +305,27 @@ if st.session_state.get("results"):
 
     # KPI header
     c1, c2, c3, c4, c5, c6 = st.columns(6)
-    c1.metric("# Students", f"{kpis.get('# Students', 0):,}")
+    c1.metric("# Students", f"{kpis.get('# Students', 0):,}", help=HELP.KPI_STUDENTS)
     avg_grade = kpis.get("Average Grade")
-    c2.metric("Average Grade", f"{avg_grade:.1f}%" if avg_grade is not None else "—")
-    c3.metric("Median Letter Grade", kpis.get("Median Letter Grade", "—"))
+    c2.metric(
+        "Average Grade",
+        f"{avg_grade:.1f}%" if avg_grade is not None else "—",
+        help=HELP.KPI_AVG_GRADE,
+    )
+    c3.metric("Median Letter Grade", kpis.get("Median Letter Grade", "—"), help=HELP.KPI_MEDIAN_LETTER)
     avg_echo = kpis.get("Average Echo360 engagement")
-    c4.metric("Avg Echo Engagement", f"{avg_echo:.1f}%" if avg_echo is not None else "—")
-    c5.metric("# of Fs", f"{kpis.get('# of Fs', 0):,}")
+    c4.metric(
+        "Avg Echo Engagement",
+        f"{avg_echo:.1f}%" if avg_echo is not None else "—",
+        help=HELP.KPI_ECHO_ENGAGEMENT,
+    )
+    c5.metric("# of Fs", f"{kpis.get('# of Fs', 0):,}", help=HELP.KPI_FS)
     avg_assign = kpis.get("Avg Assignment Grade (class)")
-    c6.metric("Avg Assignment Grade", f"{avg_assign*100:.1f}%" if avg_assign is not None else "—")
+    c6.metric(
+        "Avg Assignment Grade",
+        f"{avg_assign*100:.1f}%" if avg_assign is not None else "—",
+        help=HELP.KPI_ASSIGNMENT_AVG,
+    )
 
     tab1, tab2, tab3, tab4 = st.tabs(["Tables", "Charts", "Exports", "AI Analysis"])
 
@@ -286,36 +333,64 @@ if st.session_state.get("results"):
         st.subheader("Echo Summary (per media)")
         es_disp, es_cfg = _percentize_for_display(
             echo_tables.echo_summary,
-            ["Average View %", "% of Students Viewing", "% of Video Viewed Overall"]
+            ["Average View %", "% of Students Viewing", "% of Video Viewed Overall"],
+            help_text=HELP.DEFAULT,
+            help_overrides=HELP.ECHO_SUMMARY_COLUMNS,
         )
-        st.dataframe(es_disp, use_container_width=True, column_config=es_cfg)
+        st.data_editor(
+            es_disp,
+            use_container_width=True,
+            column_config=es_cfg,
+            hide_index=True,
+            disabled=True,
+        )
 
 
         st.subheader("Echo Module Table")
         em_disp, em_cfg = _percentize_for_display(
             echo_tables.module_table,
-            ["Average View %", "Overall View %"]
+            ["Average View %", "Overall View %"],
+            help_text=HELP.DEFAULT,
+            help_overrides=HELP.ECHO_MODULE_COLUMNS,
         )
-        st.dataframe(em_disp, use_container_width=True, column_config=em_cfg)
+        st.data_editor(
+            em_disp,
+            use_container_width=True,
+            column_config=em_cfg,
+            hide_index=True,
+            disabled=True,
+        )
 
 
         st.subheader("Gradebook Summary Rows")
-        gb_sum_disp = gb_tables.gradebook_summary_df.copy()
-        # all columns are fractions → scale to %
-        gb_sum_disp = gb_sum_disp.apply(pd.to_numeric, errors="coerce") * 100.0
-        gb_sum_cfg = {
-            col: st.column_config.NumberColumn(col, format="%.1f%%")
-            for col in gb_sum_disp.columns
-        }
-        st.dataframe(gb_sum_disp, use_container_width=True, column_config=gb_sum_cfg)
+        gb_percent_cols = list(gb_tables.gradebook_summary_df.columns)
+        gb_sum_disp, gb_sum_cfg = _percentize_for_display(
+            gb_tables.gradebook_summary_df,
+            gb_percent_cols,
+            help_text=HELP.GRADEBOOK_SUMMARY_DEFAULT,
+        )
+        st.data_editor(
+            gb_sum_disp,
+            use_container_width=True,
+            column_config=gb_sum_cfg,
+            disabled=True,
+        )
 
 
         st.subheader("Gradebook Module Metrics")
         gm_disp, gm_cfg = _percentize_for_display(
             gb_tables.module_assignment_metrics_df,
-            ["Avg % Turned In", "Avg Average Excluding Zeros"]
+            ["Avg % Turned In", "Avg Average Excluding Zeros"],
+            help_text=HELP.DEFAULT,
+            help_overrides=HELP.GRADEBOOK_MODULE_COLUMNS,
         )
-        st.dataframe(gm_disp, use_container_width=True, column_config=gm_cfg)
+        st.data_editor(
+            gm_disp,
+            use_container_width=True,
+            column_config=gm_cfg,
+            hide_index=True,
+            disabled=True,
+        )
 
     with tab2:
         if not gb_tables.module_assignment_metrics_df.empty:
