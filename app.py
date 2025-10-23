@@ -1,5 +1,36 @@
 import io
 from collections.abc import Iterator
+from typing import Mapping, Optional
+
+import pandas as pd
+import streamlit as st
+
+from services.canvas import CanvasService
+from processors.echo_adapter import build_echo_tables
+from processors.grades_adapter import build_gradebook_tables
+from ui.charts import chart_gradebook_combo, chart_echo_combo
+from ui.helptext import HELP
+from ui.kpis import compute_kpis
+from ai.analysis import generate_analysis
+import os
+from pandas.api import types as ptypes
+
+st.set_page_config(page_title="Canvas/Echo Dashboard", layout="wide")
+from ui.theme import apply_theme, hero
+apply_theme()
+
+hero(
+    "Canvas & Echo Insights",
+    "Upload your Canvas course number and CSV exports to explore engagement, grading, and AI-generated takeaways in a unified dashboard.",
+    emoji="✨",
+)
+
+# Centering toggle (wizard only)
+_CSS_SLOT = st.empty()
+
+def _set_wizard_center(on: bool):
+import io
+from collections.abc import Iterator
 from typing import Optional
 
 import pandas as pd
@@ -300,6 +331,92 @@ if st.session_state.get("results"):
 
     # KPI header
     c1, c2, c3, c4, c5, c6 = st.columns(6)
+    c1.metric("# Students", f"{kpis.get('# Students', 0):,}", help=HELP.KPI_STUDENTS)
+    avg_grade = kpis.get("Average Grade")
+    c2.metric(
+        "Average Grade",
+        f"{avg_grade:.1f}%" if avg_grade is not None else "—",
+        help=HELP.KPI_AVG_GRADE,
+    )
+    c3.metric("Median Letter Grade", kpis.get("Median Letter Grade", "—"), help=HELP.KPI_MEDIAN_LETTER)
+    avg_echo = kpis.get("Average Echo360 engagement")
+    c4.metric(
+        "Avg Echo Engagement",
+        f"{avg_echo:.1f}%" if avg_echo is not None else "—",
+        help=HELP.KPI_ECHO_ENGAGEMENT,
+    )
+    c5.metric("# of Fs", f"{kpis.get('# of Fs', 0):,}", help=HELP.KPI_FS)
+    avg_assign = kpis.get("Avg Assignment Grade (class)")
+    c6.metric(
+        "Avg Assignment Grade",
+        f"{avg_assign*100:.1f}%" if avg_assign is not None else "—",
+        help=HELP.KPI_ASSIGNMENT_AVG,
+    )
+
+    tab1, tab2, tab3, tab4 = st.tabs(["Tables", "Charts", "Exports", "AI Analysis"])
+
+    with tab1:
+        st.subheader("Echo Summary (per media)")
+        es_disp, es_cfg = _percentize_for_display(
+            echo_tables.echo_summary,
+            ["Average View %", "% of Students Viewing", "% of Video Viewed Overall"],
+            help_text=HELP.DEFAULT,
+            help_overrides=HELP.ECHO_SUMMARY_COLUMNS,
+        )
+        st.data_editor(
+            es_disp,
+            use_container_width=True,
+            column_config=es_cfg,
+            hide_index=True,
+            disabled=True,
+        )
+
+
+        st.subheader("Echo Module Table")
+        em_disp, em_cfg = _percentize_for_display(
+            echo_tables.module_table,
+            ["Average View %", "Overall View %"],
+            help_text=HELP.DEFAULT,
+            help_overrides=HELP.ECHO_MODULE_COLUMNS,
+        )
+        st.data_editor(
+            em_disp,
+            use_container_width=True,
+            column_config=em_cfg,
+            hide_index=True,
+            disabled=True,
+        )
+
+
+        st.subheader("Gradebook Summary Rows")
+        gb_percent_cols = list(gb_tables.gradebook_summary_df.columns)
+        gb_sum_disp, gb_sum_cfg = _percentize_for_display(
+            gb_tables.gradebook_summary_df,
+            gb_percent_cols,
+            help_text=HELP.GRADEBOOK_SUMMARY_DEFAULT,
+        )
+        st.data_editor(
+            gb_sum_disp,
+            use_container_width=True,
+            column_config=gb_sum_cfg,
+            disabled=True,
+        )
+
+
+        st.subheader("Gradebook Module Metrics")
+        gm_disp, gm_cfg = _percentize_for_display(
+            gb_tables.module_assignment_metrics_df,
+            ["Avg % Turned In", "Avg Average Excluding Zeros"],
+            help_text=HELP.DEFAULT,
+            help_overrides=HELP.GRADEBOOK_MODULE_COLUMNS,
+        )
+        st.data_editor(
+            gm_disp,
+            use_container_width=True,
+            column_config=gm_cfg,
+            hide_index=True,
+            disabled=True,
+        )
     c1.metric("# Students", f"{kpis.get('# Students', 0):,}", help="# of students currently enrolled")
     avg_grade = kpis.get("Average Grade")
     c2.metric("Average Grade", f"{avg_grade:.1f}%" if avg_grade is not None else "—", help="Average Numeric Final Grade")
