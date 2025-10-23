@@ -123,10 +123,16 @@ def chart_echo_combo(
             )
         )
 
+    yaxis_config = dict(title="Students", rangemode="tozero")
+    if y_max:
+        yaxis_config.update(range=[0, y_max], autorange=False)
+    else:
+        yaxis_config.update(autorange=True)
+
     fig.update_layout(
         title=title,                  # keep your existing title var
-        barmode="stack",
-        yaxis=dict(title="Students", autorange=True, rangemode="tozero"),
+        barmode=barmode,
+        yaxis=yaxis_config,
         yaxis2=dict(
             title="Percent",
             overlaying="y",           # <-- important, keeps lines on a right-hand axis
