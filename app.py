@@ -298,18 +298,18 @@ if st.session_state.get("results"):
 
     # KPI header
     c1, c2, c3, c4, c5, c6 = st.columns(6)
-    c1.metric("# Students", f"{kpis.get('# Students', 0):,}", help="Default")
+    c1.metric("# Students", f"{kpis.get('# Students', 0):,}", help="# of students currently enrolled")
     avg_grade = kpis.get("Average Grade")
-    c2.metric("Average Grade", f"{avg_grade:.1f}%" if avg_grade is not None else "—", help="Default")
-    c3.metric("Median Letter Grade", kpis.get("Median Letter Grade", "—"), help="Default")
+    c2.metric("Average Grade", f"{avg_grade:.1f}%" if avg_grade is not None else "—", help="Average Numeric Final Grade")
+    c3.metric("Median Letter Grade", kpis.get("Median Letter Grade", "—"), help="Median Letter Grade")
     avg_echo = kpis.get("Average Echo360 engagement")
-    c4.metric("Avg Echo Engagement", f"{avg_echo:.1f}%" if avg_echo is not None else "—", help="Default")
-    c5.metric("# of Fs", f"{kpis.get('# of Fs', 0):,}", help="Default")
+    c4.metric("Avg Echo Engagement", f"{avg_echo:.1f}%" if avg_echo is not None else "—", help="Average of the % watched by students who click play")
+    c5.metric("# of Fs", f"{kpis.get('# of Fs', 0):,}", help="# of students who recieved an F as the final grade")
     avg_assign = kpis.get("Avg Assignment Grade (class)")
     c6.metric(
         "Avg Assignment Grade",
         f"{avg_assign*100:.1f}%" if avg_assign is not None else "—",
-        help="Default",
+        help="Average % grade per assignment",
     )
 
     tab1, tab2, tab3, tab4 = st.tabs(["Tables", "Charts", "Exports", "AI Analysis"])
@@ -320,7 +320,7 @@ if st.session_state.get("results"):
             echo_tables.echo_summary,
             ["Average View %", "% of Students Viewing", "% of Video Viewed Overall"]
         )
-        st.dataframe(es_disp, use_container_width=True, column_config=es_cfg)
+        st.dataframe(es_disp, width='stretch, column_config=es_cfg)
 
 
         st.subheader("Echo Module Table")
@@ -328,7 +328,7 @@ if st.session_state.get("results"):
             echo_tables.module_table,
             ["Average View %", "Overall View %"]
         )
-        st.dataframe(em_disp, use_container_width=True, column_config=em_cfg)
+        st.dataframe(em_disp, width='stretch, column_config=em_cfg)
 
 
         st.subheader("Gradebook Summary Rows")
@@ -339,7 +339,7 @@ if st.session_state.get("results"):
             col: st.column_config.NumberColumn(col, format="%.1f%%", help="Default")
             for col in gb_sum_disp.columns
         }
-        st.dataframe(gb_sum_disp, use_container_width=True, column_config=gb_sum_cfg)
+        st.dataframe(gb_sum_disp, width='stretch, column_config=gb_sum_cfg)
 
 
         st.subheader("Gradebook Module Metrics")
@@ -347,18 +347,18 @@ if st.session_state.get("results"):
             gb_tables.module_assignment_metrics_df,
             ["Avg % Turned In", "Avg Average Excluding Zeros"]
         )
-        st.dataframe(gm_disp, use_container_width=True, column_config=gm_cfg)
+        st.dataframe(gm_disp, width='stretch, column_config=gm_cfg)
 
     with tab2:
         if not gb_tables.module_assignment_metrics_df.empty:
-            st.plotly_chart(chart_gradebook_combo(gb_tables.module_assignment_metrics_df, title="Canvas Data"), use_container_width=True)
+            st.plotly_chart(chart_gradebook_combo(gb_tables.module_assignment_metrics_df, title="Canvas Data"), width='stretch)
         else:
             st.info("No module-level gradebook metrics to plot.")
 
         if not echo_tables.module_table.empty:
             st.plotly_chart(
                 chart_echo_combo(echo_tables.module_table, students_total=students_total, title="Echo Data"),
-                use_container_width=True
+                width='stretch
             )
 
         else:
@@ -420,6 +420,7 @@ if st.session_state.get("results"):
                         st.markdown(text)
                     except Exception as e:
                         st.error(f"AI analysis failed: {e}")
+
 
 
 
