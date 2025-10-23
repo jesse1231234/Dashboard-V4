@@ -1,4 +1,5 @@
 # ui/helptext.py
+
 class HELP:
     """Central place to edit dashboard help copy."""
 
