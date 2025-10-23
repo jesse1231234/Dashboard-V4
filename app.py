@@ -320,7 +320,7 @@ if st.session_state.get("results"):
             echo_tables.echo_summary,
             ["Average View %", "% of Students Viewing", "% of Video Viewed Overall"]
         )
-        st.dataframe(es_disp, width=stretch, column_config=es_cfg)
+        st.dataframe(es_disp, width="stretch", column_config=es_cfg)
 
 
         st.subheader("Echo Module Table")
@@ -328,7 +328,7 @@ if st.session_state.get("results"):
             echo_tables.module_table,
             ["Average View %", "Overall View %"]
         )
-        st.dataframe(em_disp, width=stretch, column_config=em_cfg)
+        st.dataframe(em_disp, width="stretch", column_config=em_cfg)
 
 
         st.subheader("Gradebook Summary Rows")
@@ -339,7 +339,7 @@ if st.session_state.get("results"):
             col: st.column_config.NumberColumn(col, format="%.1f%%", help="Default")
             for col in gb_sum_disp.columns
         }
-        st.dataframe(gb_sum_disp, width=stretch, column_config=gb_sum_cfg)
+        st.dataframe(gb_sum_disp, width="stretch", column_config=gb_sum_cfg)
 
 
         st.subheader("Gradebook Module Metrics")
@@ -347,18 +347,18 @@ if st.session_state.get("results"):
             gb_tables.module_assignment_metrics_df,
             ["Avg % Turned In", "Avg Average Excluding Zeros"]
         )
-        st.dataframe(gm_disp, width=stretch, column_config=gm_cfg)
+        st.dataframe(gm_disp, width="stretch", column_config=gm_cfg)
 
     with tab2:
         if not gb_tables.module_assignment_metrics_df.empty:
-            st.plotly_chart(chart_gradebook_combo(gb_tables.module_assignment_metrics_df, title="Canvas Data"), width=stretch)
+            st.plotly_chart(chart_gradebook_combo(gb_tables.module_assignment_metrics_df, title="Canvas Data"), width="stretch")
         else:
             st.info("No module-level gradebook metrics to plot.")
 
         if not echo_tables.module_table.empty:
             st.plotly_chart(
                 chart_echo_combo(echo_tables.module_table, students_total=students_total, title="Echo Data"),
-                width=stretch
+                width="stretch"
             )
 
         else:
@@ -420,6 +420,7 @@ if st.session_state.get("results"):
                         st.markdown(text)
                     except Exception as e:
                         st.error(f"AI analysis failed: {e}")
+
 
 
 
