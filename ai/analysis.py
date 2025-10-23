@@ -11,9 +11,9 @@ Rules:
 - No identifying info about students; use only aggregates.
 - Be specific: cite modules and metrics with percentages/counts.
 - Call out trends and outliers.
-- Focus on suggestions of how to interpret the data instead of direct applications to the classroom.
+- Focus on descriptions of the data instead interpretations of the data.
 - Do not make teaching recommendations. Only report on the data.
-- Keep it under ~300 words unless asked for more.
+- Keep it under ~500 words unless asked for more.
 """
 
 def _df_to_markdown(df: Optional[pd.DataFrame], max_rows: int = 30) -> str:
@@ -61,10 +61,9 @@ Data for analysis (de-identified):
 {_df_to_markdown(gradebook_module_df)}
 
 Instructions:
-- Explain overall engagement vs. module order.
-- Highlight modules with low Avg View % or low % Turned In.
-- Note discrepancies between viewing and grades.
-- Offer 3 concrete teaching actions.
+- Be specific: cite modules and metrics with percentages/counts.
+- Call out trends and outliers.
+- Focus on descriptions of the data instead of interpretations.
 """
     client = OpenAI()  # uses OPENAI_API_KEY from env or st.secrets (see app.py)
     resp = client.chat.completions.create(
