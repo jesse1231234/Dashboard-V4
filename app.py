@@ -19,7 +19,7 @@ apply_theme()
 
 hero(
     "Canvas & Echo Insights",
-    "Upload your Canvas course number and CSV exports to explore engagement, grading, and AI-generated takeaways in a unified dashboard.",
+    "All data has been de-identified. Mouse over the '?' for more information about each component",
     emoji="✨",
 )
 
@@ -407,6 +407,7 @@ if st.session_state.get("results"):
                         st.markdown(text)
                     except Exception as e:
                         st.error(f"AI analysis failed: {e}")
+
 
 
 
