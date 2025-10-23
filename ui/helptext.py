@@ -1,24 +1,44 @@
 # ui/helptext.py
 class HELP:
-    # KPIs
-    STUDENTS = "Active StudentEnrollment count from Canvas (excludes concluded/withdrawn)."
-    MEDIAN_LETTER = "Middle letter grade after ordering A+…F. Robust to outliers."
-    AVG_ASSIGN_GRADE = "Class average of 'Average Excluding Zeros' across assignments."
+    """Central place to edit dashboard help copy."""
+
+    DEFAULT = "Default"
+
+    # KPI tooltips
+    KPI_STUDENTS = DEFAULT
+    KPI_AVG_GRADE = DEFAULT
+    KPI_MEDIAN_LETTER = DEFAULT
+    KPI_ECHO_ENGAGEMENT = DEFAULT
+    KPI_FS = DEFAULT
+    KPI_ASSIGNMENT_AVG = DEFAULT
 
     # Echo tables
-    ECHO_AVG_VIEW = "Mean of per-media (view_seconds / duration) for videos in the module."
-    ECHO_OVERALL = "Sum(view_seconds) / (duration * #students), then averaged across media."
-    ECHO_STUDENTS_VIEWING = "Average unique viewers per video in the module (not a sum)."
+    ECHO_SUMMARY_COLUMNS = {
+        "Media Title": DEFAULT,
+        "Video Duration": DEFAULT,
+        "# of Unique Viewers": DEFAULT,
+        "Average View %": DEFAULT,
+        "% of Students Viewing": DEFAULT,
+        "% of Video Viewed Overall": DEFAULT,
+    }
+
+    ECHO_MODULE_COLUMNS = {
+        "Module": DEFAULT,
+        "Average View %": DEFAULT,
+        "# of Students Viewing": DEFAULT,
+        "Overall View %": DEFAULT,
+        "# of Students": DEFAULT,
+    }
 
     # Gradebook tables
-    GB_TURNED_IN = "Average of '% Turned In' across assignments in the module."
-    GB_AVG_EXCL0 = "Average of 'Average Excluding Zeros' across assignments in the module."
+    GRADEBOOK_SUMMARY_DEFAULT = DEFAULT  # assignment columns are dynamic → use a fallback
+    GRADEBOOK_MODULE_COLUMNS = {
+        "Module": DEFAULT,
+        "Avg % Turned In": DEFAULT,
+        "Avg Average Excluding Zeros": DEFAULT,
+        "n_assignments": DEFAULT,
+    }
 
     # Charts
-    CHART_ECHO = (
-        "Bars: total students with the filled portion = # of unique viewers per module. "
-        "Lines: Avg View % and Overall View % on a percent axis."
-    )
-    CHART_GB = (
-        "Two lines: Avg %% Turned In and Avg Excluding Zeros per module (0–100%)."
-    )
+    CHART_ECHO = DEFAULT
+    CHART_GB = DEFAULT

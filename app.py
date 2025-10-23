@@ -9,9 +9,11 @@ from services.canvas import CanvasService
 from processors.echo_adapter import build_echo_tables
 from processors.grades_adapter import build_gradebook_tables
 from ui.charts import chart_gradebook_combo, chart_echo_combo
+from ui.helptext import HELP
 from ui.kpis import compute_kpis
 from ai.analysis import generate_analysis
 import os
+from pandas.api import types as ptypes
 
 st.set_page_config(page_title="Canvas/Echo Dashboard", layout="wide")
 from ui.theme import apply_theme, hero
