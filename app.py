@@ -145,7 +145,12 @@ def sort_by_canvas_order(df: pd.DataFrame, module_col: str, canvas_df: pd.DataFr
     return out
 
 # --- Table display helper (place at top level, not inside another function) ---
-def _percentize_for_display(df: pd.DataFrame, percent_cols: list[str], decimals: int = 1):
+def _percentize_for_display(
+    df: pd.DataFrame,
+    percent_cols: list[str],
+    decimals: int = 1,
+    help_text: str = "Default",
+):
     """
     Return (copy_of_df_with_selected_cols*100) and a Streamlit column_config for % formatting.
     """
@@ -153,10 +158,14 @@ def _percentize_for_display(df: pd.DataFrame, percent_cols: list[str], decimals:
     for col in percent_cols:
         if col in disp.columns:
             disp[col] = pd.to_numeric(disp[col], errors="coerce") * 100.0
-    cfg = {
-        col: st.column_config.NumberColumn(col, format=f"%.{decimals}f%%")
-        for col in percent_cols if col in disp.columns
-    }
+    cfg: dict[str, object] = {}
+    for col in disp.columns:
+        cfg[col] = st.column_config.Column(col, help=help_text)
+    for col in percent_cols:
+        if col in disp.columns:
+            cfg[col] = st.column_config.NumberColumn(
+                col, format=f"%.{decimals}f%%", help=help_text
+            )
     return disp, cfg
 
 # ---------------- Wizard UI ----------------
@@ -289,15 +298,19 @@ if st.session_state.get("results"):
 
     # KPI header
     c1, c2, c3, c4, c5, c6 = st.columns(6)
-    c1.metric("# Students", f"{kpis.get('# Students', 0):,}")
+    c1.metric("# Students", f"{kpis.get('# Students', 0):,}", help="Default")
     avg_grade = kpis.get("Average Grade")
-    c2.metric("Average Grade", f"{avg_grade:.1f}%" if avg_grade is not None else "—")
-    c3.metric("Median Letter Grade", kpis.get("Median Letter Grade", "—"))
+    c2.metric("Average Grade", f"{avg_grade:.1f}%" if avg_grade is not None else "—", help="Default")
+    c3.metric("Median Letter Grade", kpis.get("Median Letter Grade", "—"), help="Default")
     avg_echo = kpis.get("Average Echo360 engagement")
-    c4.metric("Avg Echo Engagement", f"{avg_echo:.1f}%" if avg_echo is not None else "—")
-    c5.metric("# of Fs", f"{kpis.get('# of Fs', 0):,}")
+    c4.metric("Avg Echo Engagement", f"{avg_echo:.1f}%" if avg_echo is not None else "—", help="Default")
+    c5.metric("# of Fs", f"{kpis.get('# of Fs', 0):,}", help="Default")
     avg_assign = kpis.get("Avg Assignment Grade (class)")
-    c6.metric("Avg Assignment Grade", f"{avg_assign*100:.1f}%" if avg_assign is not None else "—")
+    c6.metric(
+        "Avg Assignment Grade",
+        f"{avg_assign*100:.1f}%" if avg_assign is not None else "—",
+        help="Default",
+    )
 
     tab1, tab2, tab3, tab4 = st.tabs(["Tables", "Charts", "Exports", "AI Analysis"])
 
@@ -323,7 +336,7 @@ if st.session_state.get("results"):
         # all columns are fractions → scale to %
         gb_sum_disp = gb_sum_disp.apply(pd.to_numeric, errors="coerce") * 100.0
         gb_sum_cfg = {
-            col: st.column_config.NumberColumn(col, format="%.1f%%")
+            col: st.column_config.NumberColumn(col, format="%.1f%%", help="Default")
             for col in gb_sum_disp.columns
         }
         st.dataframe(gb_sum_disp, use_container_width=True, column_config=gb_sum_cfg)
