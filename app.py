@@ -17,6 +17,12 @@ st.set_page_config(page_title="Canvas/Echo Dashboard", layout="wide")
 from ui.theme import apply_theme, hero
 apply_theme()
 
+hero(
+    "Canvas & Echo Insights",
+    "Upload your Canvas course number and CSV exports to explore engagement, grading, and AI-generated takeaways in a unified dashboard.",
+    emoji="✨",
+)
+
 # Centering toggle (wizard only)
 _CSS_SLOT = st.empty()
 
@@ -49,46 +55,37 @@ def _set_wizard_center(on: bool):
             unsafe_allow_html=True,
         )
 
-st.markdown("""
-<style>
-/* Global tweaks */
-html, body, [class*="css"] { -webkit-font-smoothing: antialiased; }
-
-/* Page padding/width */
-section.main > div { padding-top: .5rem; }
-.block-container { padding-top: 1rem; padding-bottom: 2rem; }
-
-/* Headings */
-h1, h2, h3 { letter-spacing: .2px; }
-
-/* KPI cards (style st.metric) */
-div[data-testid="stMetric"]{
-  background: var(--secondary-background-color, rgba(0,0,0,0.03));
-  border: 1px solid rgba(0,0,0,0.06);
-  border-radius: 12px;
-  padding: 14px 16px;
-  box-shadow: 0 1px 3px rgba(0,0,0,.06);
-}
-div[data-testid="stMetric"] label { opacity: .75; font-size: .9rem; }
-div[data-testid="stMetric"] [data-testid="stMetricValue"]{ font-weight: 700; }
-
-/* Tabs */
-div[role="tablist"] { gap: 6px; }
-button[role="tab"]{
-  border-radius: 999px !important;
-  padding: 6px 14px !important;
-}
-
-/* DataFrames: cleaner header line */
-[data-testid="stDataFrame"] thead tr th {
-  border-bottom: 1px solid rgba(0,0,0,0.08) !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
 NOTICE = "No identifying information will be present in this analysis. All data will be de-identified."
 DEFAULT_BASE_URL = st.secrets.get("CANVAS_BASE_URL", "https://colostate.instructure.com")
 TOKEN = st.secrets.get("CANVAS_TOKEN", "")
+
+
+def render_notice(text: str, icon: str = "🔐") -> None:
+    st.markdown(
+        f"""
+        <div class="callout">
+          <span class="callout__icon">{icon}</span>
+          <div class="callout__body">{text}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def step_header(step: int, title: str, subtitle: str | None = None, emoji: str | None = None) -> None:
+    icon = f"{emoji} " if emoji else ""
+    st.markdown(
+        f"""
+        <div class="step-header">
+          <span class="step-header__badge">{step}</span>
+          <div>
+            <div class="step-header__title">{icon}{title}</div>
+            {f"<div class='step-header__subtitle'>{subtitle}</div>" if subtitle else ""}
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 # ---------------- Caching helpers ----------------
 @st.cache_resource(show_spinner=False)
@@ -179,8 +176,13 @@ _set_wizard_center(_state.step in (1, 2, 3))
 
 # ---- Step 1 ----
 if _state.step == 1:
-    st.header("Step 1 — Canvas Course Number")
-    st.info(NOTICE)
+    step_header(
+        1,
+        "Connect to your Canvas course",
+        "Enter your Canvas domain and course number so we can pull module context for the dashboard.",
+        emoji="🧭",
+    )
+    render_notice(NOTICE)
     base_url = st.text_input("Canvas Base URL", value=DEFAULT_BASE_URL)
     course_id = st.text_input(
         "Please provide the Canvas Course Number contained in the URL for the Canvas Course you are analyzing. "
@@ -205,8 +207,13 @@ if _state.step == 1:
 
 # ---- Step 2 ----
 elif _state.step == 2:
-    st.header("Step 2 — Echo CSV")
-    st.info(NOTICE)
+    step_header(
+        2,
+        "Upload Echo engagement CSV",
+        "We use this file to chart viewing behavior across modules.",
+        emoji="🎬",
+    )
+    render_notice(NOTICE)
     echo_csv = st.file_uploader("Please provide the CSV file containing your course's Echo data.", type=["csv"], key="echo_upload")
 
     if echo_csv and st.button("Continue", key="echo_continue"):
@@ -224,8 +231,13 @@ elif _state.step == 2:
 
 # ---- Step 3 ----
 elif _state.step == 3:
-    st.header("Step 3 — Gradebook CSV")
-    st.info(NOTICE)
+    step_header(
+        3,
+        "Upload Canvas gradebook CSV",
+        "We'll marry assignment performance with your Echo engagement results.",
+        emoji="📝",
+    )
+    render_notice(NOTICE)
     gb_csv = st.file_uploader("Please provide the CSV file containing your gradebook data.", type=["csv"], key="gradebook_upload")
 
     if gb_csv and st.button("Process & View Dashboard", key="gradebook_process"):
@@ -240,6 +252,8 @@ elif _state.step == 3:
             
 # ---------------- Dashboard ----------------
 if st.session_state.get("results"):
+    st.divider()
+    st.markdown("### 📊 Dashboard overview")
     echo_tables = st.session_state["echo"]
     gb_tables = st.session_state["grades"]
     canvas_df = st.session_state["canvas"]
