@@ -1,24 +1,45 @@
 # ui/helptext.py
+
 class HELP:
-    # KPIs
-    STUDENTS = "Active StudentEnrollment count from Canvas (excludes concluded/withdrawn)."
-    MEDIAN_LETTER = "Middle letter grade after ordering A+…F. Robust to outliers."
-    AVG_ASSIGN_GRADE = "Class average of 'Average Excluding Zeros' across assignments."
+    """Central place to edit dashboard help copy."""
+
+    DEFAULT: str | None = None
+
+    # KPI tooltips
+    KPI_STUDENTS = "Unique students with Canvas enrollments included in these metrics."
+    KPI_AVG_GRADE = "Coursewide average Canvas score across graded assignments."
+    KPI_MEDIAN_LETTER = "Median letter grade calculated from current Canvas scores."
+    KPI_ECHO_ENGAGEMENT = "Average Echo360 engagement percentage across all published media."
+    KPI_FS = "Number of students whose Canvas grade is currently below 60%."
+    KPI_ASSIGNMENT_AVG = "Mean assignment score for the class, combining all available grades."
 
     # Echo tables
-    ECHO_AVG_VIEW = "Mean of per-media (view_seconds / duration) for videos in the module."
-    ECHO_OVERALL = "Sum(view_seconds) / (duration * #students), then averaged across media."
-    ECHO_STUDENTS_VIEWING = "Average unique viewers per video in the module (not a sum)."
+    ECHO_SUMMARY_COLUMNS = {
+        "Media Title": "Name of the Echo360 media item as published to students.",
+        "Video Duration": "Total runtime of the media in hours:minutes:seconds.",
+        "# of Unique Viewers": "Distinct students who watched this media at least once.",
+        "Average View %": "Average portion of the video watched per student viewer.",
+        "% of Students Viewing": "Percent of enrolled students who viewed this media.",
+        "% of Video Viewed Overall": "Share of total video minutes watched across all viewers.",
+    }
+
+    ECHO_MODULE_COLUMNS = {
+        "Module": "Canvas module that contains these Echo360 media items.",
+        "Average View %": "Mean viewing percentage across all media in the module.",
+        "# of Students Viewing": "Students who watched any Echo360 media within this module.",
+        "Overall View %": "Combined percentage of media watched by the viewing students.",
+        "# of Students": "Total students in the course for comparison to viewers.",
+    }
 
     # Gradebook tables
-    GB_TURNED_IN = "Average of '% Turned In' across assignments in the module."
-    GB_AVG_EXCL0 = "Average of 'Average Excluding Zeros' across assignments in the module."
+    GRADEBOOK_SUMMARY_DEFAULT = "Assignment-level metrics aggregated from the Canvas gradebook export."
+    GRADEBOOK_MODULE_COLUMNS = {
+        "Module": "Canvas module grouping these assignments.",
+        "Avg % Turned In": "Average submission rate for assignments within the module.",
+        "Avg Average Excluding Zeros": "Mean assignment score ignoring missing (zero) submissions.",
+        "n_assignments": "Number of assignments mapped to the module.",
+    }
 
     # Charts
-    CHART_ECHO = (
-        "Bars: total students with the filled portion = # of unique viewers per module. "
-        "Lines: Avg View % and Overall View % on a percent axis."
-    )
-    CHART_GB = (
-        "Two lines: Avg %% Turned In and Avg Excluding Zeros per module (0–100%)."
-    )
+    CHART_ECHO = "Module-level Echo360 engagement compared against the total enrolled students."
+    CHART_GB = "Module-level gradebook performance trends across assignments."
