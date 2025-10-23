@@ -1,4 +1,5 @@
 import io
+from collections.abc import Iterator
 from typing import Optional
 
 import pandas as pd
@@ -91,8 +92,12 @@ TOKEN = st.secrets.get("CANVAS_TOKEN", "")
 
 # ---------------- Caching helpers ----------------
 @st.cache_resource(show_spinner=False)
-def get_canvas_service(base_url: str, token: str) -> CanvasService:
-    return CanvasService(base_url, token)
+def get_canvas_service(base_url: str, token: str) -> Iterator[CanvasService]:
+    svc = CanvasService(base_url, token)
+    try:
+        yield svc
+    finally:
+        svc.close()
 
 @st.cache_resource(show_spinner=True)
 def fetch_canvas_order_df(base_url: str, token: str, course_id: str) -> pd.DataFrame:
