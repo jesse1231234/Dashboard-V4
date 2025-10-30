@@ -11,7 +11,7 @@ Rules:
 - No identifying info about students; use only aggregates.
 - Be specific: cite modules and metrics with percentages/counts.
 - Call out trends and outliers.
-- Focus on descriptions of the data instead interpretations of the data.
+- Focus on descriptions of the data.
 - Do not make teaching recommendations. Only report on the data.
 - Keep it under ~500 words unless asked for more.
 """
@@ -63,7 +63,7 @@ Data for analysis (de-identified):
 Instructions:
 - Be specific: cite modules and metrics with percentages/counts.
 - Call out trends and outliers.
-- Focus on descriptions of the data instead of interpretations.
+- Focus on descriptions of the data.
 """
     client = OpenAI()  # uses OPENAI_API_KEY from env or st.secrets (see app.py)
     resp = client.chat.completions.create(
