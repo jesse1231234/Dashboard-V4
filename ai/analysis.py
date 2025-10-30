@@ -8,7 +8,6 @@ from openai import OpenAI
 SYSTEM_PROMPT = """You are an academic learning analytics assistant.
 Write a concise, plain-English analysis for instructors teaching online asychronous courses.
 Rules:
-- No identifying info about students; use only aggregates.
 - Be specific: cite modules and metrics with percentages/counts.
 - Call out trends and outliers.
 - Focus on descriptions of the data.
@@ -64,6 +63,8 @@ Instructions:
 - Be specific: cite modules and metrics with percentages/counts.
 - Call out trends and outliers.
 - Focus on descriptions of the data.
+- identify general trends and data points worthy of further investigation.
+- No need to list each section of the course individually. Simply call out aspects of the data that seem important for further investigation.
 """
     client = OpenAI()  # uses OPENAI_API_KEY from env or st.secrets (see app.py)
     resp = client.chat.completions.create(
