@@ -1,5 +1,6 @@
 import io
 from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Optional
 
 import pandas as pd
@@ -88,7 +89,7 @@ def step_header(step: int, title: str, subtitle: str | None = None, emoji: str |
     )
 
 # ---------------- Caching helpers ----------------
-@st.cache_resource(show_spinner=False)
+@contextmanager
 def get_canvas_service(base_url: str, token: str) -> Iterator[CanvasService]:
     svc = CanvasService(base_url, token)
     try:
@@ -98,13 +99,13 @@ def get_canvas_service(base_url: str, token: str) -> Iterator[CanvasService]:
 
 @st.cache_resource(show_spinner=True)
 def fetch_canvas_order_df(base_url: str, token: str, course_id: str) -> pd.DataFrame:
-    svc = get_canvas_service(base_url, token)
-    return svc.build_order_df(int(course_id))
+    with get_canvas_service(base_url, token) as svc:
+        return svc.build_order_df(int(course_id))
 
 @st.cache_resource(show_spinner=False)
 def fetch_student_count(base_url: str, token: str, course_id: str) -> Optional[int]:
-    svc = get_canvas_service(base_url, token)
-    return svc.get_student_count(int(course_id))
+    with get_canvas_service(base_url, token) as svc:
+        return svc.get_student_count(int(course_id))
 
 @st.cache_data(show_spinner=True)
 def run_echo_tables(file_bytes: bytes, canvas_df: pd.DataFrame, students_total: Optional[int]):
