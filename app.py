@@ -298,16 +298,15 @@ if st.session_state.get("results"):
 
 
     # KPI header
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("# Students", f"{kpis.get('# Students', 0):,}", help="# of students currently enrolled")
     avg_grade = kpis.get("Average Grade")
-    c2.metric("Average Grade", f"{avg_grade:.1f}%" if avg_grade is not None else "—", help="Average Numeric Final Grade")
-    c3.metric("Median Letter Grade", kpis.get("Median Letter Grade", "—"), help="Median Letter Grade")
+    c2.metric("Median Letter Grade", kpis.get("Median Letter Grade", "—"), help="Median Letter Grade")
     avg_echo = kpis.get("Average Echo360 engagement")
-    c4.metric("Avg Echo Engagement", f"{avg_echo:.1f}%" if avg_echo is not None else "—", help="Average of the % watched by students who click play")
-    c5.metric("# of Fs", f"{kpis.get('# of Fs', 0):,}", help="# of students who recieved an F as the final grade")
+    c3.metric("Avg Echo Engagement", f"{avg_echo:.1f}%" if avg_echo is not None else "—", help="Average of the % watched by students who click play")
+    c4.metric("# of Fs", f"{kpis.get('# of Fs', 0):,}", help="# of students who recieved an F as the final grade")
     avg_assign = kpis.get("Avg Assignment Grade (class)")
-    c6.metric(
+    c5.metric(
         "Avg Assignment Grade",
         f"{avg_assign*100:.1f}%" if avg_assign is not None else "—",
         help="Average % grade per assignment",
@@ -421,6 +420,7 @@ if st.session_state.get("results"):
                         st.markdown(text)
                     except Exception as e:
                         st.error(f"AI analysis failed: {e}")
+
 
 
 
