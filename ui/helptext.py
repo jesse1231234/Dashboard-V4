@@ -63,7 +63,12 @@ _DEFAULT_AI = {
 
 
 def _read_config() -> ConfigParser:
-    parser = ConfigParser(comment_prefixes=(), inline_comment_prefixes=(), strict=False)
+    parser = ConfigParser(
+        interpolation=None,
+        comment_prefixes=(),
+        inline_comment_prefixes=(),
+        strict=False,
+    )
     parser.optionxform = str  # preserve case for column names
     if _HELP_FILE.exists():
         with _HELP_FILE.open("r", encoding="utf-8") as handle:
