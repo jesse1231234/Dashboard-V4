@@ -1,5 +1,5 @@
 import io
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from typing import Optional
 
@@ -10,6 +10,7 @@ from services.canvas import CanvasService
 from processors.echo_adapter import build_echo_tables
 from processors.grades_adapter import build_gradebook_tables
 from ui.charts import chart_gradebook_combo, chart_echo_combo
+from ui.helptext import HELP
 from ui.kpis import compute_kpis
 from ai.analysis import generate_analysis
 import os
@@ -150,7 +151,7 @@ def _percentize_for_display(
     df: pd.DataFrame,
     percent_cols: list[str],
     decimals: int = 1,
-    help_text: str = "Default",
+    help_text: Mapping[str, str] | str | None = HELP.DEFAULT,
 ):
     """
     Return (copy_of_df_with_selected_cols*100) and a Streamlit column_config for % formatting.
@@ -160,12 +161,22 @@ def _percentize_for_display(
         if col in disp.columns:
             disp[col] = pd.to_numeric(disp[col], errors="coerce") * 100.0
     cfg: dict[str, object] = {}
+    lookup: Mapping[str, str] | None
+    default_help: str | None
+    if isinstance(help_text, Mapping):
+        lookup = help_text
+        default_help = HELP.DEFAULT
+    else:
+        lookup = None
+        default_help = help_text
     for col in disp.columns:
-        cfg[col] = st.column_config.Column(col, help=help_text)
+        help_value = lookup.get(col, default_help) if lookup else default_help
+        cfg[col] = st.column_config.Column(col, help=help_value)
     for col in percent_cols:
         if col in disp.columns:
+            help_value = lookup.get(col, default_help) if lookup else default_help
             cfg[col] = st.column_config.NumberColumn(
-                col, format=f"%.{decimals}f%%", help=help_text
+                col, format=f"%.{decimals}f%%", help=help_value
             )
     return disp, cfg
 
@@ -299,17 +310,17 @@ if st.session_state.get("results"):
 
     # KPI header
     c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("# Students", f"{kpis.get('# Students', 0):,}", help="# of students currently enrolled")
+    c1.metric("# Students", f"{kpis.get('# Students', 0):,}", help=HELP.KPI_STUDENTS)
     avg_grade = kpis.get("Average Grade")
-    c2.metric("Median Letter Grade", kpis.get("Median Letter Grade", "—"), help="Median Letter Grade")
+    c2.metric("Median Letter Grade", kpis.get("Median Letter Grade", "—"), help=HELP.KPI_MEDIAN_LETTER)
     avg_echo = kpis.get("Average Echo360 engagement")
-    c3.metric("Avg Echo Engagement", f"{avg_echo:.1f}%" if avg_echo is not None else "—", help="Average of the % watched by students who click play")
-    c4.metric("# of Fs", f"{kpis.get('# of Fs', 0):,}", help="# of students who recieved an F as the final grade")
+    c3.metric("Avg Echo Engagement", f"{avg_echo:.1f}%" if avg_echo is not None else "—", help=HELP.KPI_ECHO_ENGAGEMENT)
+    c4.metric("# of Fs", f"{kpis.get('# of Fs', 0):,}", help=HELP.KPI_FS)
     avg_assign = kpis.get("Avg Assignment Grade (class)")
     c5.metric(
         "Avg Assignment Grade",
         f"{avg_assign*100:.1f}%" if avg_assign is not None else "—",
-        help="Average % grade per assignment",
+        help=HELP.KPI_ASSIGNMENT_AVG,
     )
 
     tab1, tab2, tab3, tab4 = st.tabs(["Tables", "Charts", "Exports", "AI Analysis"])
@@ -318,7 +329,8 @@ if st.session_state.get("results"):
         st.subheader("Echo Summary (per media)")
         es_disp, es_cfg = _percentize_for_display(
             echo_tables.echo_summary,
-            ["Average View %", "% of Students Viewing", "% of Video Viewed Overall"]
+            ["Average View %", "% of Students Viewing", "% of Video Viewed Overall"],
+            help_text=HELP.ECHO_SUMMARY_COLUMNS,
         )
         st.dataframe(es_disp, width="stretch", column_config=es_cfg)
 
@@ -326,7 +338,8 @@ if st.session_state.get("results"):
         st.subheader("Echo Module Table")
         em_disp, em_cfg = _percentize_for_display(
             echo_tables.module_table,
-            ["Average View %", "Overall View %"]
+            ["Average View %", "Overall View %"],
+            help_text=HELP.ECHO_MODULE_COLUMNS,
         )
         st.dataframe(em_disp, width="stretch", column_config=em_cfg)
 
@@ -336,7 +349,7 @@ if st.session_state.get("results"):
         # all columns are fractions → scale to %
         gb_sum_disp = gb_sum_disp.apply(pd.to_numeric, errors="coerce") * 100.0
         gb_sum_cfg = {
-            col: st.column_config.NumberColumn(col, format="%.1f%%", help="Default")
+            col: st.column_config.NumberColumn(col, format="%.1f%%", help=HELP.GRADEBOOK_SUMMARY_DEFAULT)
             for col in gb_sum_disp.columns
         }
         st.dataframe(gb_sum_disp, width="stretch", column_config=gb_sum_cfg)
@@ -345,13 +358,18 @@ if st.session_state.get("results"):
         st.subheader("Gradebook Module Metrics")
         gm_disp, gm_cfg = _percentize_for_display(
             gb_tables.module_assignment_metrics_df,
-            ["Avg % Turned In", "Avg Average Excluding Zeros"]
+            ["Avg % Turned In", "Avg Average Excluding Zeros"],
+            help_text=HELP.GRADEBOOK_MODULE_COLUMNS,
         )
         st.dataframe(gm_disp, width="stretch", column_config=gm_cfg)
 
     with tab2:
         if not gb_tables.module_assignment_metrics_df.empty:
-            st.plotly_chart(chart_gradebook_combo(gb_tables.module_assignment_metrics_df, title="Canvas Data"), width="stretch")
+            st.plotly_chart(
+                chart_gradebook_combo(gb_tables.module_assignment_metrics_df, title="Canvas Data"),
+                width="stretch",
+            )
+            st.caption(f"ℹ️ {HELP.CHART_GB}")
         else:
             st.info("No module-level gradebook metrics to plot.")
 
@@ -360,6 +378,7 @@ if st.session_state.get("results"):
                 chart_echo_combo(echo_tables.module_table, students_total=students_total, title="Echo Data"),
                 width="stretch"
             )
+            st.caption(f"ℹ️ {HELP.CHART_ECHO}")
 
         else:
             st.info("No module-level Echo metrics to plot.")
@@ -391,6 +410,7 @@ if st.session_state.get("results"):
 
     with tab4:
         st.subheader("AI Analysis")
+        st.caption(f"ℹ️ {HELP.AI_ANALYSIS}")
         st.caption("No identifying information will be present in this analysis. All data will be de-identified.")
 
         # Model + settings
