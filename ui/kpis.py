@@ -47,7 +47,6 @@ def compute_kpis(
     """
     Returns a dict with:
       - "# Students" (int)
-      - "Average Grade" (numeric 0..100)
       - "Median Letter Grade" (str)
       - "Average Echo360 engagement" (0..100)
       - "# of Fs" (int)
@@ -58,12 +57,6 @@ def compute_kpis(
         n_students = int(students_from_canvas)
     else:
         n_students = int(len(gb_tables.gradebook_df.index)) if gb_tables.gradebook_df is not None else 0
-
-    # ---------- Average Grade (numeric %) ----------
-    avg_grade = _first_numeric_mean(
-        gb_tables.gradebook_df if gb_tables.gradebook_df is not None else pd.DataFrame(),
-        ["Final Score", "Current Score", "Unposted Final Score"],
-    )
 
     # ---------- Median Letter Grade ----------
     med_letter = (
@@ -107,6 +100,7 @@ def compute_kpis(
         "# of Fs": num_fs,
         "Avg Assignment Grade (class)": avg_assignment_frac,  # fraction 0..1 or None
     }
+
 
 
 
