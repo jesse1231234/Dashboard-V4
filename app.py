@@ -21,7 +21,7 @@ apply_theme()
 
 hero(
     "Canvas & Echo Insights",
-    "All data has been de-identified. Mouse over the '?' for more information about each component",
+    "All data has been de-identified. Mouse over the '?' or the Column headers for more information about each component",
     emoji="✨",
 )
 
@@ -440,6 +440,7 @@ if st.session_state.get("results"):
                         st.markdown(text)
                     except Exception as e:
                         st.error(f"AI analysis failed: {e}")
+
 
 
 
