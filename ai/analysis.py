@@ -110,7 +110,7 @@ Instructions:
 
         # Build the payload (kpis + dataframes) above as you are already doing...
 
-    client = _get_azure_openai_client()
+       client = _get_azure_openai_client()
 
     # Use the Azure OpenAI *deployment name*
     deployment_name = (
@@ -121,7 +121,7 @@ Instructions:
 
     try:
         resp = client.chat.completions.create(
-            model=deployment_name,  # deployment name, not base model ID
+            model=deployment_name,  # deployment name, NOT the base model name
             temperature=temperature,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
@@ -129,9 +129,9 @@ Instructions:
             ],
         )
     except Exception as e:
+        # Don't touch internal attributes; just surface deployment + underlying error
         raise RuntimeError(
-            f"Azure OpenAI call failed using endpoint='{client._client._config.azure_endpoint}' "  # best-effort debug info
-            f" and deployment='{deployment_name}': {e}"
+            f"Azure OpenAI call failed for deployment '{deployment_name}': {e}"
         )
 
     return (resp.choices[0].message.content or "").strip()
