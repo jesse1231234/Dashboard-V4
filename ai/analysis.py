@@ -109,7 +109,7 @@ Instructions:
     
     # build payload above as you already do...
 
-        client = _get_azure_openai_client()
+    client = _get_azure_openai_client()
 
     deployment_name = (
         st.secrets.get("AZURE_OPENAI_DEPLOYMENT", None)
