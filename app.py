@@ -424,27 +424,31 @@ if st.session_state.get("results"):
         azure_key = st.secrets.get("AZURE_OPENAI_API_KEY", os.getenv("AZURE_OPENAI_API_KEY", ""))
         azure_endpoint = st.secrets.get("AZURE_OPENAI_ENDPOINT", os.getenv("AZURE_OPENAI_ENDPOINT", ""))
 
-        if not azure_key or not azure_endpoint:
-            st.warning(
-                "Add AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY to Streamlit secrets "
-                "to enable AI analysis."
-            )
-        else:
-            # Button to generate
-            if st.button("Generate analysis"):
-                with st.spinner("Analyzing your dashboard data..."):
-                    try:
-                        text = generate_analysis(
-                            kpis=kpis,
-                            echo_module_df=echo_tables.module_table if echo_tables else None,
-                            gradebook_module_df=gb_tables.module_assignment_metrics_df if gb_tables else None,
-                            gradebook_summary_df=gb_tables.gradebook_summary_df if gb_tables else None,
-                            model=model,            # used as deployment name if provided
-                            temperature=temperature,
-                        )
-                        st.markdown(text)
-                    except Exception as e:
-                        st.error(f"AI analysis failed: {e}")
+        ai_key = st.secrets.get("AZURE_AI_API_KEY", os.getenv("AZURE_AI_API_KEY", ""))
+ai_base_url = st.secrets.get("AZURE_AI_BASE_URL", os.getenv("AZURE_AI_BASE_URL", ""))
+
+if not ai_key or not ai_base_url:
+    st.warning(
+        "Add AZURE_AI_BASE_URL and AZURE_AI_API_KEY to Streamlit secrets "
+        "to enable AI analysis."
+    )
+else:
+    if st.button("Generate analysis"):
+        with st.spinner("Analyzing your dashboard data..."):
+            try:
+                text = generate_analysis(
+                    kpis=kpis,
+                    echo_module_df=echo_tables.module_table if echo_tables else None,
+                    gradebook_module_df=gb_tables.module_assignment_metrics_df if gb_tables else None,
+                    gradebook_summary_df=gb_tables.gradebook_summary_df if gb_tables else None,
+                    model=None,          # or a specific override if you want
+                    temperature=temperature,
+                )
+                st.markdown(text)
+            except Exception as e:
+                st.error(f"AI analysis failed: {e}")
+
+
 
 
 
