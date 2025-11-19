@@ -409,49 +409,32 @@ if st.session_state.get("results"):
         )
 
     with tab4:
-    st.header("AI Analysis")
+        st.header("AI Analysis")
 
-    temperature = st.slider("Temperature", 0.0, 1.0, 0.1, 0.05)
+        temperature = st.slider("Temperature", 0.0, 1.0, 0.1, 0.05)
 
-    # ---- CHECK SECRETS FOR AZURE OPENAI RESOURCE ----
-    aoai_key = st.secrets.get("AZURE_OPENAI_API_KEY", os.getenv("AZURE_OPENAI_API_KEY", ""))
-    aoai_endpoint = st.secrets.get("AZURE_OPENAI_ENDPOINT", os.getenv("AZURE_OPENAI_ENDPOINT", ""))
+        # ---- CHECK SECRETS FOR AZURE OPENAI RESOURCE ----
+        aoai_key = st.secrets.get("AZURE_OPENAI_API_KEY", os.getenv("AZURE_OPENAI_API_KEY", ""))
+        aoai_endpoint = st.secrets.get("AZURE_OPENAI_ENDPOINT", os.getenv("AZURE_OPENAI_ENDPOINT", ""))
 
-    if not aoai_key or not aoai_endpoint:
-        st.warning(
-            "Add AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY to Streamlit secrets "
-            "to enable AI analysis."
-        )
-    else:
-        if st.button("Generate analysis"):
-            with st.spinner("Analyzing your dashboard data..."):
-                try:
-                    text = generate_analysis(
-                        kpis=kpis,
-                        echo_module_df=echo_tables.module_table if echo_tables else None,
-                        gradebook_module_df=gb_tables.module_assignment_metrics_df if gb_tables else None,
-                        gradebook_summary_df=gb_tables.gradebook_summary_df if gb_tables else None,
-                        # model can be None; generate_analysis will fall back to AZURE_OPENAI_DEPLOYMENT
-                        model=None,
-                        temperature=temperature,
-                    )
-                    st.markdown(text)
-                except Exception as e:
-                    st.error(f"AI analysis failed: {e}")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        if not aoai_key or not aoai_endpoint:
+            st.warning(
+                "Add AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY to Streamlit secrets "
+                "to enable AI analysis."
+            )
+        else:
+            if st.button("Generate analysis"):
+                with st.spinner("Analyzing your dashboard data..."):
+                    try:
+                        text = generate_analysis(
+                            kpis=kpis,
+                            echo_module_df=echo_tables.module_table if echo_tables else None,
+                            gradebook_module_df=gb_tables.module_assignment_metrics_df if gb_tables else None,
+                            gradebook_summary_df=gb_tables.gradebook_summary_df if gb_tables else None,
+                            # model can be None; generate_analysis will fall back to AZURE_OPENAI_DEPLOYMENT
+                            model=None,
+                            temperature=temperature,
+                        )
+                        st.markdown(text)
+                    except Exception as e:
+                        st.error(f"AI analysis failed: {e}")
