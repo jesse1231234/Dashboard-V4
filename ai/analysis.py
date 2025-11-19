@@ -17,15 +17,6 @@ Rules:
 """
 
 def _get_azure_openai_client() -> AzureOpenAI:
-    """
-    Create an Azure OpenAI client using the same env/secret pattern
-    as the Canvas rewriter app.
-
-    Required (Streamlit secrets OR environment variables):
-      - AZURE_OPENAI_ENDPOINT
-      - AZURE_OPENAI_API_KEY
-      - AZURE_OPENAI_API_VERSION (optional, default: 2024-02-01)
-    """
     endpoint = (
         st.secrets.get("AZURE_OPENAI_ENDPOINT", None)
         or os.getenv("AZURE_OPENAI_ENDPOINT")
