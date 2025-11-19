@@ -109,21 +109,26 @@ Instructions:
     
     # build payload above as you already do...
 
-    client = _get_azure_openai_client()
+        client = _get_azure_openai_client()
 
-    # Prefer a global deployment name, but allow overriding via the `model` arg
     deployment_name = (
         st.secrets.get("AZURE_OPENAI_DEPLOYMENT", None)
         or os.getenv("AZURE_OPENAI_DEPLOYMENT")
-        or model  # fallback so you can pass a deployment name via `model`
     )
+    if not deployment_name:
+        raise RuntimeError(
+            "AZURE_OPENAI_DEPLOYMENT is not set. "
+            "Set it in Streamlit secrets or environment to the *deployment name* "
+            "of your Azure OpenAI model."
+        )
 
     resp = client.chat.completions.create(
-        model=deployment_name,  # this is the Azure *deployment* name
+        model=deployment_name,  # Azure deployment name, not base model
         temperature=temperature,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": payload},
         ],
     )
+    return (resp.choices[0].message.content or "").strip()
     return (resp.choices[0].message.content or "").strip()
