@@ -409,37 +409,37 @@ if st.session_state.get("results"):
         )
 
     with tab4:
-    st.header("AI Analysis")
+        st.header("AI Analysis")
 
-    # You probably already have model / temperature controls here; keep them if you want
-    # For example:
-    # model = st.selectbox("Model", ["gpt-4.1-mini"], index=0)
-    temperature = st.slider("Temperature", 0.0, 1.0, 0.1, 0.05)
+        # You probably already have model / temperature controls here; keep them if you want
+        # For example:
+        # model = st.selectbox("Model", ["gpt-4.1-mini"], index=0)
+        temperature = st.slider("Temperature", 0.0, 1.0, 0.1, 0.05)
 
-    # ---- CHECK SECRETS FOR AZURE AI FOUNDRY ENDPOINT ----
-    ai_key = st.secrets.get("AZURE_AI_API_KEY", os.getenv("AZURE_AI_API_KEY", ""))
-    ai_base_url = st.secrets.get("AZURE_AI_BASE_URL", os.getenv("AZURE_AI_BASE_URL", ""))
+        # ---- CHECK SECRETS FOR AZURE AI FOUNDRY ENDPOINT ----
+        ai_key = st.secrets.get("AZURE_AI_API_KEY", os.getenv("AZURE_AI_API_KEY", ""))
+        ai_base_url = st.secrets.get("AZURE_AI_BASE_URL", os.getenv("AZURE_AI_BASE_URL", ""))
 
-    if not ai_key or not ai_base_url:
-        st.warning(
-            "Add AZURE_AI_BASE_URL and AZURE_AI_API_KEY to Streamlit secrets "
-            "to enable AI analysis."
-        )
-    else:
-        if st.button("Generate analysis"):
-            with st.spinner("Analyzing your dashboard data..."):
-                try:
-                    text = generate_analysis(
-                        kpis=kpis,
-                        echo_module_df=echo_tables.module_table if echo_tables else None,
-                        gradebook_module_df=gb_tables.module_assignment_metrics_df if gb_tables else None,
-                        gradebook_summary_df=gb_tables.gradebook_summary_df if gb_tables else None,
-                        model=None,       # or override with a specific model string if you want
-                        temperature=temperature,
-                    )
-                    st.markdown(text)
-                except Exception as e:
-                    st.error(f"AI analysis failed: {e}")
+        if not ai_key or not ai_base_url:
+            st.warning(
+                "Add AZURE_AI_BASE_URL and AZURE_AI_API_KEY to Streamlit secrets "
+                "to enable AI analysis."
+            )
+        else:
+            if st.button("Generate analysis"):
+                with st.spinner("Analyzing your dashboard data..."):
+                    try:
+                        text = generate_analysis(
+                            kpis=kpis,
+                            echo_module_df=echo_tables.module_table if echo_tables else None,
+                            gradebook_module_df=gb_tables.module_assignment_metrics_df if gb_tables else None,
+                            gradebook_summary_df=gb_tables.gradebook_summary_df if gb_tables else None,
+                            model=None,       # or override with a specific model string if you want
+                            temperature=temperature,
+                        )
+                        st.markdown(text)
+                    except Exception as e:
+                        st.error(f"AI analysis failed: {e}")
 
 else:
     if st.button("Generate analysis"):
@@ -456,6 +456,7 @@ else:
                 st.markdown(text)
             except Exception as e:
                 st.error(f"AI analysis failed: {e}")
+
 
 
 
