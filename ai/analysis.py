@@ -4,7 +4,7 @@ from typing import Optional
 import os
 import pandas as pd
 import streamlit as st
-from openai import OpenAI
+from openai import AzureOpenAI
 
 SYSTEM_PROMPT = """You are an academic learning analytics assistant.
 Write a concise, plain-English analysis for instructors teaching online asychronous courses.
@@ -16,34 +16,43 @@ Rules:
 - Keep it under ~500 words unless asked for more.
 """
 
-def _get_ai_client() -> OpenAI:
+def _get_azure_openai_client() -> AzureOpenAI:
     """
-    Create an OpenAI client for an Azure AI Foundry / Models-as-a-Service endpoint.
+    Create an Azure OpenAI client that talks to your classic
+    Azure OpenAI resource (the one that hosts your deployment).
 
-    Expected secrets/env:
-      - AZURE_AI_BASE_URL   e.g. "https://<your-project>.services.ai.azure.com"
-      - AZURE_AI_API_KEY    e.g. the key from the Foundry 'Keys' blade
+    Required (Streamlit secrets OR env vars):
+
+      - AZURE_OPENAI_ENDPOINT   e.g. "https://<resource>.openai.azure.com/"
+      - AZURE_OPENAI_API_KEY    your Azure OpenAI key
+      - AZURE_OPENAI_API_VERSION  e.g. "2024-02-01"
     """
-    base_url = (
-        st.secrets.get("AZURE_AI_BASE_URL", None)
-        or os.getenv("AZURE_AI_BASE_URL")
+    endpoint = (
+        st.secrets.get("AZURE_OPENAI_ENDPOINT", None)
+        or os.getenv("AZURE_OPENAI_ENDPOINT")
     )
     api_key = (
-        st.secrets.get("AZURE_AI_API_KEY", None)
-        or os.getenv("AZURE_AI_API_KEY")
+        st.secrets.get("AZURE_OPENAI_API_KEY", None)
+        or os.getenv("AZURE_OPENAI_API_KEY")
+    )
+    api_version = (
+        st.secrets.get("AZURE_OPENAI_API_VERSION", None)
+        or os.getenv("AZURE_OPENAI_API_VERSION")
+        or "2024-02-01"
     )
 
-    if not base_url or not api_key:
+    if not endpoint or not api_key:
         raise RuntimeError(
-            "Azure AI config missing. "
-            "Set AZURE_AI_BASE_URL and AZURE_AI_API_KEY in Streamlit secrets or env."
+            "Azure OpenAI config missing. "
+            "Set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY in secrets/env."
         )
 
-    # IMPORTANT: no api_version here, and we use base_url (not azure_endpoint)
-    return OpenAI(
-        base_url=base_url,
+    return AzureOpenAI(
+        azure_endpoint=endpoint,
         api_key=api_key,
+        api_version=api_version,
     )
+
 
 def _df_to_markdown(df: Optional[pd.DataFrame], max_rows: int = 30) -> str:
     if df is None or df.empty:
@@ -99,18 +108,20 @@ Instructions:
     
     # build payload above as you already do...
 
-    client = _get_ai_client()
+        # Build the payload (kpis + dataframes) above as you are already doing...
 
-    # Use a model name suitable for your Foundry endpoint
-    model_name = (
-        st.secrets.get("AZURE_AI_MODEL", None)
-        or os.getenv("AZURE_AI_MODEL")
-        or model  # let the function arg override if you want
+    client = _get_azure_openai_client()
+
+    # Use the Azure OpenAI *deployment name*
+    deployment_name = (
+        st.secrets.get("AZURE_OPENAI_DEPLOYMENT", None)
+        or os.getenv("AZURE_OPENAI_DEPLOYMENT")
+        or model  # allow override via function arg if you want
     )
 
     try:
         resp = client.chat.completions.create(
-            model=model_name,  # e.g. "gpt-4.1-mini"
+            model=deployment_name,  # deployment name, not base model ID
             temperature=temperature,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
@@ -118,10 +129,9 @@ Instructions:
             ],
         )
     except Exception as e:
-        # Make debugging easier in the UI
         raise RuntimeError(
-            f"Azure AI call failed using base_url='{client.base_url}' "
-            f"and model='{model_name}': {e}"
+            f"Azure OpenAI call failed using endpoint='{client._client._config.azure_endpoint}' "  # best-effort debug info
+            f" and deployment='{deployment_name}': {e}"
         )
 
     return (resp.choices[0].message.content or "").strip()
