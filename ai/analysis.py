@@ -4,7 +4,7 @@ from typing import Optional
 import os
 import pandas as pd
 import streamlit as st
-from openai import AzureOpenAI
+from openai import OpenAI
 
 SYSTEM_PROMPT = """You are an academic learning analytics assistant.
 Write a concise, plain-English analysis for instructors teaching online asychronous courses.
@@ -16,34 +16,33 @@ Rules:
 - Keep it under ~500 words unless asked for more.
 """
 
-def _get_azure_openai_client() -> AzureOpenAI:
-    endpoint = (
-        st.secrets.get("AZURE_OPENAI_ENDPOINT", None)
-        or os.getenv("AZURE_OPENAI_ENDPOINT")
+def _get_ai_client() -> OpenAI:
+    """
+    Create an OpenAI client for an Azure AI Foundry / Models-as-a-Service endpoint.
+
+    Expected secrets/env:
+      - AZURE_AI_BASE_URL   e.g. "https://<your-project>.services.ai.azure.com"
+      - AZURE_AI_API_KEY    e.g. the key from the Foundry 'Keys' blade
+    """
+    base_url = (
+        st.secrets.get("AZURE_AI_BASE_URL", None)
+        or os.getenv("AZURE_AI_BASE_URL")
     )
     api_key = (
-        st.secrets.get("AZURE_OPENAI_API_KEY", None)
-        or os.getenv("AZURE_OPENAI_API_KEY")
-    )
-    api_version = (
-        st.secrets.get("AZURE_OPENAI_API_VERSION", None)
-        or os.getenv("AZURE_OPENAI_API_VERSION")
-        or "2024-02-01"
+        st.secrets.get("AZURE_AI_API_KEY", None)
+        or os.getenv("AZURE_AI_API_KEY")
     )
 
-    if not endpoint or not api_key:
-        # We raise here instead of st.stop() so callers *could* catch it,
-        # but in this app it'll just surface as an error in Streamlit.
+    if not base_url or not api_key:
         raise RuntimeError(
-            "Azure OpenAI config missing. "
-            "Set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY "
-            "in Streamlit secrets or environment."
+            "Azure AI config missing. "
+            "Set AZURE_AI_BASE_URL and AZURE_AI_API_KEY in Streamlit secrets or env."
         )
 
-    return AzureOpenAI(
-        azure_endpoint=endpoint,
+    # IMPORTANT: no api_version here, and we use base_url (not azure_endpoint)
+    return OpenAI(
+        base_url=base_url,
         api_key=api_key,
-        api_version=api_version,
     )
 
 def _df_to_markdown(df: Optional[pd.DataFrame], max_rows: int = 30) -> str:
@@ -100,26 +99,29 @@ Instructions:
     
     # build payload above as you already do...
 
-    client = _get_azure_openai_client()
+    client = _get_ai_client()
 
-    deployment_name = (
-        st.secrets.get("AZURE_OPENAI_DEPLOYMENT", None)
-        or os.getenv("AZURE_OPENAI_DEPLOYMENT")
+    # Use a model name suitable for your Foundry endpoint
+    model_name = (
+        st.secrets.get("AZURE_AI_MODEL", None)
+        or os.getenv("AZURE_AI_MODEL")
+        or model  # let the function arg override if you want
     )
-    if not deployment_name:
+
+    try:
+        resp = client.chat.completions.create(
+            model=model_name,  # e.g. "gpt-4.1-mini"
+            temperature=temperature,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": payload},
+            ],
+        )
+    except Exception as e:
+        # Make debugging easier in the UI
         raise RuntimeError(
-            "AZURE_OPENAI_DEPLOYMENT is not set. "
-            "Set it in Streamlit secrets or environment to the *deployment name* "
-            "of your Azure OpenAI model."
+            f"Azure AI call failed using base_url='{client.base_url}' "
+            f"and model='{model_name}': {e}"
         )
 
-    resp = client.chat.completions.create(
-        model=deployment_name,  # Azure deployment name, not base model
-        temperature=temperature,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": payload},
-        ],
-    )
-    return (resp.choices[0].message.content or "").strip()
     return (resp.choices[0].message.content or "").strip()
