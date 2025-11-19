@@ -110,7 +110,7 @@ Instructions:
 
         # Build the payload (kpis + dataframes) above as you are already doing...
 
-       client = _get_azure_openai_client()
+    client = _get_azure_openai_client()
 
     # Use the Azure OpenAI *deployment name*
     deployment_name = (
