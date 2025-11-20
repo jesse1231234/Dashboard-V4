@@ -4,7 +4,7 @@ from typing import Optional
 import os
 import pandas as pd
 import streamlit as st
-from openai import AzureOpenAI
+from openai import OpenAI
 
 SYSTEM_PROMPT = """You are an academic learning analytics assistant.
 Write a concise, plain-English analysis for instructors teaching online asychronous courses.
@@ -16,41 +16,34 @@ Rules:
 - Keep it under ~500 words unless asked for more.
 """
 
-def _get_azure_openai_client() -> AzureOpenAI:
+def _get_ai_client() -> OpenAI:
     """
-    Create an Azure OpenAI client that talks to your classic
-    Azure OpenAI resource (the one that hosts your deployment).
+    Create an OpenAI client for an Azure AI Foundry / Project endpoint.
 
-    Required (Streamlit secrets OR env vars):
-
-      - AZURE_OPENAI_ENDPOINT   e.g. "https://<resource>.openai.azure.com/"
-      - AZURE_OPENAI_API_KEY    your Azure OpenAI key
-      - AZURE_OPENAI_API_VERSION  e.g. "2024-02-01"
+    Expected secrets/env:
+      - OPENAI_BASE_URL  e.g. "https://<something>.services.ai.azure.com/openai/v1"
+      - OPENAI_API_KEY   the key from the Foundry 'Use model' / 'Connections' blade
     """
-    endpoint = (
-        st.secrets.get("AZURE_OPENAI_ENDPOINT", None)
-        or os.getenv("AZURE_OPENAI_ENDPOINT")
+    base_url = (
+        st.secrets.get("OPENAI_BASE_URL", None)
+        or os.getenv("OPENAI_BASE_URL")
     )
     api_key = (
-        st.secrets.get("AZURE_OPENAI_API_KEY", None)
-        or os.getenv("AZURE_OPENAI_API_KEY")
-    )
-    api_version = (
-        st.secrets.get("AZURE_OPENAI_API_VERSION", None)
-        or os.getenv("AZURE_OPENAI_API_VERSION")
-        or "2024-02-01"
+        st.secrets.get("OPENAI_API_KEY", None)
+        or os.getenv("OPENAI_API_KEY")
     )
 
-    if not endpoint or not api_key:
+    if not base_url or not api_key:
         raise RuntimeError(
-            "Azure OpenAI config missing. "
-            "Set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY in secrets/env."
+            "OpenAI config missing. "
+            "Set OPENAI_BASE_URL and OPENAI_API_KEY in Streamlit secrets or env."
         )
 
-    return AzureOpenAI(
-        azure_endpoint=endpoint,
+    # Foundry guidance: use OpenAI client with base_url pointing at the
+    # Azure AI / OpenAI endpoint that already includes '/openai/v1'. :contentReference[oaicite:1]{index=1}
+    return OpenAI(
+        base_url=base_url,
         api_key=api_key,
-        api_version=api_version,
     )
 
 
@@ -110,28 +103,29 @@ Instructions:
 
         # Build the payload (kpis + dataframes) above as you are already doing...
 
-    client = _get_azure_openai_client()
+    client = _get_ai_client()
 
-    # Use the Azure OpenAI *deployment name*
-    deployment_name = (
-        st.secrets.get("AZURE_OPENAI_DEPLOYMENT", None)
-        or os.getenv("AZURE_OPENAI_DEPLOYMENT")
-        or model  # allow override via function arg if you want
-    )
-
-    try:
-        resp = client.chat.completions.create(
-            model=deployment_name,  # deployment name, NOT the base model name
-            temperature=temperature,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": payload},
-            ],
-        )
-    except Exception as e:
-        # Don't touch internal attributes; just surface deployment + underlying error
-        raise RuntimeError(
-            f"Azure OpenAI call failed for deployment '{deployment_name}': {e}"
+        # Model ID to pass to the Foundry/OpenAI endpoint.
+        # You can override via the `model` argument, but we also support a secret.
+        model_name = (
+            st.secrets.get("OPENAI_MODEL", None)
+            or os.getenv("OPENAI_MODEL")
+            or model  # fallback to the function arg default
         )
 
-    return (resp.choices[0].message.content or "").strip()
+        try:
+            resp = client.chat.completions.create(
+                model=model_name,   # e.g. "gpt-4.1-mini", "grok-3", etc.
+                temperature=temperature,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": payload},
+                ],
+            )
+        except Exception as e:
+            # Nice clean error that surfaces the model name, but not internals
+            raise RuntimeError(
+                f"OpenAI/Foundry call failed for model '{model_name}': {e}"
+            )
+
+        return (resp.choices[0].message.content or "").strip()
