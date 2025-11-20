@@ -103,29 +103,29 @@ Instructions:
 
         # Build the payload (kpis + dataframes) above as you are already doing...
 
-    client = _get_ai_client()
+        client = _get_ai_client()
 
-        # Model ID to pass to the Foundry/OpenAI endpoint.
-        # You can override via the `model` argument, but we also support a secret.
-            model_name = (
-            st.secrets.get("OPENAI_MODEL", None)
-            or os.getenv("OPENAI_MODEL")
-            or model  # fallback to the function arg default
+    # Model ID to pass to the Foundry/OpenAI endpoint.
+    # You can override via the `model` argument, but we also support a secret.
+    model_name = (
+        st.secrets.get("OPENAI_MODEL", None)
+        or os.getenv("OPENAI_MODEL")
+        or model  # fallback to the function arg default
+    )
+
+    try:
+        resp = client.chat.completions.create(
+            model=model_name,   # e.g. "gpt-4.1-mini", "grok-3", etc.
+            temperature=temperature,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": payload},
+            ],
+        )
+    except Exception as e:
+        # Nice clean error that surfaces the model name, but not internals
+        raise RuntimeError(
+            f"OpenAI/Foundry call failed for model '{model_name}': {e}"
         )
 
-        try:
-            resp = client.chat.completions.create(
-                model=model_name,   # e.g. "gpt-4.1-mini", "grok-3", etc.
-                temperature=temperature,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": payload},
-                ],
-            )
-        except Exception as e:
-            # Nice clean error that surfaces the model name, but not internals
-            raise RuntimeError(
-                f"OpenAI/Foundry call failed for model '{model_name}': {e}"
-            )
-
-        return (resp.choices[0].message.content or "").strip()
+    return (resp.choices[0].message.content or "").strip()
