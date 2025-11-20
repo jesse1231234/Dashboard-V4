@@ -103,7 +103,7 @@ Instructions:
 
         # Build the payload (kpis + dataframes) above as you are already doing...
 
-        client = _get_ai_client()
+    client = _get_ai_client()
 
     # Model ID to pass to the Foundry/OpenAI endpoint.
     # You can override via the `model` argument, but we also support a secret.
