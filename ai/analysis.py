@@ -107,7 +107,7 @@ Instructions:
 
         # Model ID to pass to the Foundry/OpenAI endpoint.
         # You can override via the `model` argument, but we also support a secret.
-        model_name = (
+            model_name = (
             st.secrets.get("OPENAI_MODEL", None)
             or os.getenv("OPENAI_MODEL")
             or model  # fallback to the function arg default
